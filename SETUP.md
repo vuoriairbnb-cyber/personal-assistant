@@ -33,8 +33,9 @@ keep it out of any file reachable from a Client Component.
 ## 2. Supabase project
 
 1. Create a project at supabase.com.
-2. In the SQL editor, run `db/migrations/0001_init.sql`, then
-   `db/migrations/0002_approval_gate.sql` (in that order). Together they create:
+2. In the SQL editor, run, **in this exact order**:
+   `db/migrations/0001_init.sql`, then `db/migrations/0002_approval_gate.sql`,
+   then `db/migrations/0003_fix_owner_bootstrap.sql`. Together they create:
    - `profiles`, `trips`, `trip_ai_outputs`, `ai_cost_logs`, `app_settings`
    - a trigger that creates a `profiles` row on signup (defaulting to
      `status = 'pending'`, `role = 'user'`)
@@ -42,6 +43,12 @@ keep it out of any file reachable from a Client Component.
      helper functions (`is_owner`, `is_approved`) and a trigger that blocks
      anyone but the owner from changing `status`/`role`/`approved_by`/
      `approved_at`/`rejected_at` — even on their own row
+   - `0003` is a required bug fix on top of `0002`: the privilege-escalation
+     trigger originally reverted changes made via the service role key or the
+     SQL editor too (no JWT there means `auth.uid()` is `NULL`, so
+     `is_owner(NULL)` was always false) — which silently broke the
+     first-owner bootstrap snippet below. `0003` scopes the guard to only
+     apply when `auth.uid()` is present (i.e. a real signed-in end user).
 3. Under Authentication → Providers, enable **Email**.
 4. Under Authentication → URL Configuration, set:
    - Site URL: your deployed URL (or `http://localhost:3000` for local dev)

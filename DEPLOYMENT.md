@@ -60,6 +60,7 @@ In the Supabase SQL Editor, run these **once each, in this exact order**:
 
 1. `db/migrations/0001_init.sql`
 2. `db/migrations/0002_approval_gate.sql`
+3. `db/migrations/0003_fix_owner_bootstrap.sql`
 
 These are not idempotent (`create policy` and `add constraint` fail if run
 twice) — that's intentional for a one-shot migration file, not a bug. If a
@@ -67,10 +68,12 @@ run partially fails partway through, read the error to see which statement
 failed, fix only that statement, and continue rather than re-running the
 whole file.
 
-After both have run, `profiles` has `status`/`role`/`approved_by`/
-`approved_at`/`rejected_at`, RLS is enabled on all five tables, and every
+After all three have run, `profiles` has `status`/`role`/`approved_by`/
+`approved_at`/`rejected_at`, RLS is enabled on all five tables, every
 insert/update on `trips`, `trip_ai_outputs`, `ai_cost_logs`, and
-`app_settings` requires an approved account.
+`app_settings` requires an approved account, and the first-owner bootstrap
+snippet in step 7 below will actually take effect (it silently no-ops
+without `0003` — see that file's header comment for why).
 
 ## 5. Supabase Auth URL configuration
 
