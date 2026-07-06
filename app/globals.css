@@ -1,0 +1,101 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Surfaces */
+  --surface-canvas: #faf6ef;
+  --surface-card: #f4ecdf;
+  --surface-card-hover: #efe5d4;
+  --sand-100: #f8f1e4;
+  --sand-200: #efe2cb;
+  --sand-300: #e4d3b4;
+
+  /* Borders */
+  --border-subtle: #e7dcc9;
+  --border-default: #d9c9ac;
+  --border-strong: #3a3d46;
+
+  /* Text */
+  --text-primary: #21232a;
+  --text-secondary: #55575f;
+  --text-tertiary: #83858c;
+  --text-inverse: #faf6ef;
+
+  /* Accent (muted dusty blue) */
+  --accent: #5d7a94;
+  --accent-hover: #4e6a82;
+  --accent-active: #405770;
+  --accent-subtle: #e4ebf0;
+  --accent-foreground: #faf6ef;
+
+  /* Semantic status */
+  --success: #6b8f71;
+  --success-strong: #4b6b4e;
+  --success-bg: #e7efe4;
+
+  --warning: #c99a4b;
+  --warning-strong: #a67a34;
+  --warning-bg: #f6ecd9;
+
+  --danger: #bd6b52;
+  --danger-strong: #9e5540;
+  --danger-bg: #f5e4dd;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-full: 9999px;
+
+  /* Shadows (warm-tinted, never pure black) */
+  --shadow-xs: 0 1px 2px rgba(43, 34, 20, 0.06);
+  --shadow-sm: 0 2px 6px rgba(43, 34, 20, 0.08);
+  --shadow-md: 0 6px 16px rgba(43, 34, 20, 0.1);
+  --shadow-lg: 0 16px 40px rgba(43, 34, 20, 0.14);
+  --shadow-focus: 0 0 0 3px rgba(93, 122, 148, 0.35);
+
+  /* Layout */
+  --sidebar-width: 260px;
+  --bottom-tabs-height: 64px;
+  --content-max-width: 1120px;
+}
+
+* {
+  border-color: var(--border-subtle);
+}
+
+html,
+body {
+  background-color: var(--surface-canvas);
+  color: var(--text-primary);
+}
+
+body {
+  font-family: var(--font-manrope), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+a {
+  color: var(--accent);
+}
+
+::selection {
+  background: var(--accent-subtle);
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+  border-radius: var(--radius-sm);
+}
