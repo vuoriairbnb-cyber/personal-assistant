@@ -32,27 +32,27 @@ The product should feel like a **personal operating system + travel concierge + 
 
 ## Visual foundations
 
-**Color:** warm off-white canvas (`--surface-canvas`, `#FAF6EF`) with soft sand/beige cards (`--surface-card`, `#F4ECDF`) — never stark white, never gray. Text is a charcoal-navy blend (`--text-primary`, `#21232A`) — dark enough for strong contrast but warmer than pure black. One muted, dusty blue accent (`--accent`, `#5D7A94`) carries all primary actions and links — never a bright/saturated blue. Semantic status colors are muted, not saturated: sage green for success, warm amber for warning, muted terracotta for danger/destructive. No purple, no neon, no saturated gradients anywhere.
+**Color:** cool off-white/lavender canvas (`--surface-canvas`, `#F6F5FA`) with white cards (`--surface-card`, `#FFFFFF`). Text is a near-black violet-charcoal (`--text-primary`, `#151521`) — dark enough for strong contrast but not pure black. One confident violet accent (`--accent`, `#6D4CFF`) carries all primary actions, links and active nav state. Semantic status colors stay muted, not saturated: sage green for success, warm amber for warning, muted terracotta for danger/destructive — these are deliberately unchanged from the original palette since they're status colors, not part of the canvas/card/accent identity.
 
 **Type:** three families, each with one clear job. `Newsreader` (serif) is the editorial/display voice — trip names, page titles, big numbers/amounts — it's what makes the product feel like a considered concierge document rather than a SaaS dashboard. `Manrope` (sans) is the UI workhorse — labels, body copy, buttons, nav. `IBM Plex Mono` is reserved for anything literal and precise — confirmation codes, dates in tables, reference numbers — never for prose. See "Font substitution" caveat below: these are Google Fonts stand-ins, not licensed brand fonts.
 
 **Spacing:** 4px base scale (4/8/12/16/20/24/32/40/48/64/80/96). Cards use 20px internal padding by default; card-to-card gaps in a stack are 12px. Generous whitespace throughout — this is a spacious workspace, not a dense dashboard.
 
-**Backgrounds:** flat warm color only. No photographic backgrounds, no full-bleed hero imagery, no illustration patterns, no textures, no gradients. The canvas itself carries the warmth; content sits on sand cards above it.
+**Backgrounds:** flat color only. No photographic backgrounds, no full-bleed hero imagery, no illustration patterns, no textures, no gradients. The canvas is a cool off-white/lavender; content sits on white cards above it.
 
-**Radius:** generously rounded, always soft — 8px on small controls (inputs, tags), 12px on buttons/mid controls, 16px on standard cards, 22px on modals/large surfaces, full pill on badges/switches/chips. Never sharp corners, never a tiny 2–4px "SaaS default" radius.
+**Radius:** generously rounded, always soft — 8px on small controls (inputs, tags), 12px on buttons/mid controls, 20px on standard cards, 24px on modals/large surfaces, full pill on badges/switches/chips. Never sharp corners, never a tiny 2–4px "SaaS default" radius.
 
-**Shadows:** soft and warm-tinted (`rgba(43,34,20,…)`, never pure black) — a light lift, not a hard drop shadow. Four steps (xs/sm/md/lg) scale with elevation: list rows almost flat, cards a gentle lift, modals the most pronounced. A dedicated `--shadow-focus` ring (soft blue halo) marks keyboard/input focus — no harsh blue outline.
+**Shadows:** soft and cool-violet-tinted (`rgba(25,20,60,…)`, never pure black) — a light lift, not a hard drop shadow. Four steps (xs/sm/md/lg) scale with elevation: list rows almost flat, cards a gentle lift, modals the most pronounced. A dedicated `--shadow-focus` ring (violet halo) marks keyboard/input focus — no harsh blue outline.
 
-**Borders:** thin (1–1.5px) hairline borders in sand tones (`--border-subtle`, `--border-default`) separate cards from the canvas even where shadow alone would suffice — this keeps edges crisp at low elevation. Borders darken to `--border-strong` (charcoal) only for interactive controls needing more definition (checkbox/radio outlines).
+**Borders:** thin (1–1.5px) hairline borders in cool neutral tones (`--border-subtle`, `--border-default`) separate cards from the canvas even where shadow alone would suffice — this keeps edges crisp at low elevation. Borders darken to `--border-strong` (near-black violet-charcoal) only for interactive controls needing more definition (checkbox/radio outlines).
 
 **Animation:** minimal and functional, never decorative. Standard ease (`cubic-bezier(0.4,0,0.2,1)`) at 120–200ms for hovers/toggles; a slightly springier ease-out for switches/reveals. No bouncing, no infinite loops, no attention-seeking motion — this is a calm, trustworthy surface.
 
-**Hover states:** primary/secondary/danger buttons darken one step and lift 1px; ghost buttons and nav items gain a soft sand background fill (`--sand-200`); nothing changes size or shape on hover.
+**Hover states:** primary/secondary/danger buttons darken one step and lift 1px; ghost buttons and nav items gain a soft violet background fill (`--sand-200`, an accent-tinted fill despite the legacy token name); nothing changes size or shape on hover.
 
 **Press/active states:** darken a further step (`--accent-active`, `--danger-strong` etc.) with no additional transform — presses read as "committed," not "bouncy."
 
-**Corner radius & card anatomy:** the standard card = sand fill (`--surface-card`) + 1px `--border-subtle` + `--shadow-sm` + 16px radius + 20px padding. This combination (fill + hairline border + soft shadow) is the system's signature — never fill-only or border-only.
+**Corner radius & card anatomy:** the standard card = white fill (`--surface-card`) + 1px `--border-subtle` + `--shadow-sm` + 20px radius + 20px padding. This combination (fill + hairline border + soft shadow) is the system's signature — never fill-only or border-only.
 
 **Transparency/blur:** used exactly once, intentionally — the modal scrim (`rgba(33,35,42,0.35)` + 2px blur) to focus attention on approval dialogs. Not used decoratively elsewhere.
 

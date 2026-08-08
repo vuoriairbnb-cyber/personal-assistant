@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 interface DialogProps {
@@ -36,7 +37,7 @@ export function Dialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-[rgba(33,35,42,0.35)] backdrop-blur-[2px]"
+        className="absolute inset-0 bg-[rgba(21,21,33,0.32)] backdrop-blur-[2px]"
         onClick={onClose}
         aria-hidden
       />
@@ -48,7 +49,19 @@ export function Dialog({
           className
         )}
       >
-        {title && <h2 className="font-serif text-xl text-text-primary">{title}</h2>}
+        {title && (
+          <div className="flex items-start justify-between gap-4">
+            <h2 className="font-serif text-xl text-text-primary">{title}</h2>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close dialog"
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-text-tertiary transition-colors duration-150 hover:bg-sand-200 hover:text-text-primary"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
         {description && <p className="mt-1 text-sm text-text-secondary">{description}</p>}
         <div className={cn(title || description ? "mt-4" : undefined)}>{children}</div>
         {footer && <div className="mt-6 flex justify-end gap-3">{footer}</div>}

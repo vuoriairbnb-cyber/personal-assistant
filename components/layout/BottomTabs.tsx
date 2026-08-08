@@ -9,7 +9,7 @@ export function BottomTabs() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 flex h-bottom-tabs items-center justify-around border-t border-border-subtle bg-canvas md:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-40 flex h-bottom-tabs items-center justify-around border-t border-border-subtle bg-card md:hidden">
       {NAV_ITEMS.map((item) => {
         const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
         const Icon = item.icon;
@@ -17,8 +17,9 @@ export function BottomTabs() {
           <Link
             key={item.href}
             href={item.href}
+            aria-current={isActive ? "page" : undefined}
             className={cn(
-              "flex flex-1 flex-col items-center gap-1 py-2 text-[11px] font-medium transition-colors duration-150",
+              "flex flex-1 flex-col items-center gap-1 py-2 text-[11px] font-medium no-underline transition-colors duration-150",
               isActive ? "text-accent" : "text-text-tertiary"
             )}
           >
