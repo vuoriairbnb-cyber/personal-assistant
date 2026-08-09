@@ -1,19 +1,21 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireApprovedUser } from "@/lib/auth/guard";
-import { DEFAULT_CLUB_ID, getClub, type GolfClubConfig } from "@/lib/golf/clubs";
+import {
+  DEFAULT_CLUB_ID,
+  effectiveHorizon,
+  getClub,
+  isInSeason,
+  type GolfClubConfig,
+} from "@/lib/golf/clubs";
 import { fetchCalendarSettings, fetchReservations } from "@/lib/golf/client";
 import { computeFreeSlots } from "@/lib/golf/availability";
-import type { GolfSearchResult } from "@/lib/golf/types";
+import type { ClubDayResult, DayGroup, FreeSlot } from "@/lib/golf/types";
 
-// A club's calendar only opens this many days ahead (16 confirmed for HGK,
-// used as the default for any club that doesn't override it). Past it the
-// API still returns 200 with an empty `rows` list, which would make every
-// slot look free — misleading, so requests past the window are
-// rejected/clamped explicitly.
-const DEFAULT_MAX_DAYS_AHEAD = 16;
 const CACHE_TTL_MS = 15 * 60 * 1000;
 
-const cache = new Map<string, { data: GolfSearchResult; expiresAt: number }>();
+// Raw (unfiltered) per-club-per-day slot list — shared across every min/
+// after/before variation of a request, keyed by club so clubs never collide.
+const cache = new Map<string, { vapaat: FreeSlot[]; expiresAt: number }>();
 
 function helsinkiToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Helsinki" }).format(new Date());
@@ -25,40 +27,92 @@ function addDays(date: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-async function getDayResult(club: GolfClubConfig, date: string): Promise<GolfSearchResult> {
+async function getRawVapaat(club: GolfClubConfig, date: string): Promise<FreeSlot[]> {
   const cacheKey = `${club.id}:${date}`;
   const cached = cache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.data;
+  if (cached && cached.expiresAt > Date.now()) return cached.vapaat;
 
   const [reservations, settings] = await Promise.all([
     fetchReservations(club, date),
     fetchCalendarSettings(club, date),
   ]);
   const vapaat = computeFreeSlots(date, settings, reservations.rows);
-  const result: GolfSearchResult = { date, yhteensa: vapaat.length, vapaat };
-  cache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
-  return result;
+  cache.set(cacheKey, { vapaat, expiresAt: Date.now() + CACHE_TTL_MS });
+  return vapaat;
 }
 
-function filterResult(
-  result: GolfSearchResult,
+function filterSlots(
+  vapaat: FreeSlot[],
   min: number | null,
   after: string | null,
   before: string | null
-): GolfSearchResult {
-  const vapaat = result.vapaat.filter((slot) => {
+): FreeSlot[] {
+  return vapaat.filter((slot) => {
     if (min !== null && slot.vapaita < min) return false;
     if (after && slot.aika < after) return false;
     if (before && slot.aika >= before) return false;
     return true;
   });
-  return { ...result, yhteensa: vapaat.length, vapaat };
 }
 
 function parseMin(raw: string | null): number | null {
   if (raw === null) return null;
   const n = Number(raw);
   return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * One club's result for one day. Season/horizon are checked *before* ever
+ * calling the club's API — a closed-season or out-of-range request never
+ * generates a request, per CLAUDE-golf.md's "don't call the API for dates
+ * the calendar can't answer for" guidance. A real fetch failure is caught
+ * here too, so one club's outage never takes down a multi-club search.
+ */
+async function getClubDayResult(
+  club: GolfClubConfig,
+  date: string,
+  today: string,
+  min: number | null,
+  after: string | null,
+  before: string | null
+): Promise<ClubDayResult> {
+  if (!isInSeason(club, date)) {
+    return { club: club.id, nimi: club.nimi, status: "kausi_kiinni", vapaat: [] };
+  }
+
+  const horisonttiPaivia = effectiveHorizon(club);
+  const maxDate = addDays(today, horisonttiPaivia);
+  if (date > maxDate) {
+    return {
+      club: club.id,
+      nimi: club.nimi,
+      status: "liian_kaukana",
+      vapaat: [],
+      horisonttiPaivia,
+    };
+  }
+
+  try {
+    const raw = await getRawVapaat(club, date);
+    return { club: club.id, nimi: club.nimi, status: "ok", vapaat: filterSlots(raw, min, after, before) };
+  } catch {
+    return { club: club.id, nimi: club.nimi, status: "virhe", vapaat: [] };
+  }
+}
+
+function parseClubs(raw: string): { clubs: GolfClubConfig[]; unknown: string[] } {
+  const ids = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const clubs: GolfClubConfig[] = [];
+  const unknown: string[] = [];
+  for (const id of ids) {
+    const club = getClub(id);
+    if (club) clubs.push(club);
+    else unknown.push(id);
+  }
+  return { clubs, unknown };
 }
 
 export async function GET(request: NextRequest) {
@@ -70,10 +124,13 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
-  const clubId = searchParams.get("club") ?? DEFAULT_CLUB_ID;
-  const club = getClub(clubId);
-  if (!club) {
-    return NextResponse.json({ error: `Tuntematon klubi: ${clubId}` }, { status: 400 });
+
+  const { clubs, unknown } = parseClubs(searchParams.get("club") ?? DEFAULT_CLUB_ID);
+  if (unknown.length > 0) {
+    return NextResponse.json({ error: `Tuntematon klubi: ${unknown.join(", ")}` }, { status: 400 });
+  }
+  if (clubs.length === 0) {
+    return NextResponse.json({ error: "Anna vähintään yksi klubi." }, { status: 400 });
   }
 
   const date = searchParams.get("date");
@@ -87,39 +144,37 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Anna date tai from(+to)." }, { status: 400 });
   }
 
-  const maxDaysAhead = club.maxDaysAhead ?? DEFAULT_MAX_DAYS_AHEAD;
-  const maxDate = addDays(helsinkiToday(), maxDaysAhead);
-  const cacheHeaders = { "Cache-Control": "s-maxage=900, stale-while-revalidate=60" };
+  const today = helsinkiToday();
 
-  try {
-    if (date) {
-      if (date > maxDate) {
-        return NextResponse.json(
-          {
-            error: `${club.nimi}: kalenteri on auki vain ${maxDaysAhead} päivää eteenpäin (viimeistään ${maxDate}).`,
-          },
-          { status: 400 }
-        );
-      }
-      const result = filterResult(await getDayResult(club, date), min, after, before);
-      return NextResponse.json(result, { headers: cacheHeaders });
-    }
+  // A date-range spans however far out the *widest* selected club reaches —
+  // a narrower club still shows "liian_kaukana" per day within that range,
+  // it just doesn't cut the range short for everyone else.
+  const widestHorizon = Math.max(...clubs.map(effectiveHorizon));
+  const maxRangeDate = addDays(today, widestHorizon);
 
-    const rangeEnd = to && to < maxDate ? to : maxDate;
+  let dates: string[];
+  if (date) {
+    dates = [date];
+  } else {
+    const rangeEnd = to && to < maxRangeDate ? to : maxRangeDate;
     if (from! > rangeEnd) {
       return NextResponse.json({ error: "from on haettavan aikavälin jälkeen." }, { status: 400 });
     }
-
-    const dates: string[] = [];
+    dates = [];
     for (let d = from!; d <= rangeEnd; d = addDays(d, 1)) dates.push(d);
-
-    const results = await Promise.all(
-      dates.map(async (d) => filterResult(await getDayResult(club, d), min, after, before))
-    );
-
-    return NextResponse.json({ results }, { headers: cacheHeaders });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Golfaikojen haku epäonnistui.";
-    return NextResponse.json({ error: message }, { status: 502 });
   }
+
+  const results: DayGroup[] = await Promise.all(
+    dates.map(async (d) => ({
+      date: d,
+      clubs: await Promise.all(
+        clubs.map((club) => getClubDayResult(club, d, today, min, after, before))
+      ),
+    }))
+  );
+
+  return NextResponse.json(
+    { results },
+    { headers: { "Cache-Control": "s-maxage=900, stale-while-revalidate=60" } }
+  );
 }

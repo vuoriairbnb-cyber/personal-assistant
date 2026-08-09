@@ -7,7 +7,7 @@ import { Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils/cn";
 import { SegmentedControl } from "@/components/golf/SegmentedControl";
-import type { GolfSearchResult } from "@/lib/golf/types";
+import type { DayGroup } from "@/lib/golf/types";
 
 const PLAYER_COUNTS = [1, 2, 3, 4] as const;
 const DAY_COUNT = 14;
@@ -25,14 +25,14 @@ const TIME_INPUT_CLASSES =
   "h-9 rounded-sm border border-border-default bg-canvas px-2 text-sm text-text-primary outline-none focus-visible:border-accent";
 
 export function DateFormSearch({
-  clubId,
+  selectedClubs,
   onSearching,
   onResults,
   onError,
 }: {
-  clubId: string;
+  selectedClubs: Set<string>;
   onSearching: () => void;
-  onResults: (results: GolfSearchResult[]) => void;
+  onResults: (results: DayGroup[]) => void;
   onError: (message: string) => void;
 }) {
   const [players, setPlayers] = useState<number>(1);
@@ -68,7 +68,10 @@ export function DateFormSearch({
     setSubmitting(true);
     onSearching();
 
-    const params: Record<string, string> = { club: clubId, min: String(players) };
+    const params: Record<string, string> = {
+      club: Array.from(selectedClubs).join(","),
+      min: String(players),
+    };
     if (timeMode === "after") params.after = afterTime;
     else if (timeMode === "before") params.before = beforeTime;
     else if (timeMode === "between") {
@@ -82,11 +85,11 @@ export function DateFormSearch({
         dates.map(async (date) => {
           const search = new URLSearchParams({ date, ...params });
           const response = await fetch(`/api/golf?${search.toString()}`);
-          const body = (await response.json()) as GolfSearchResult | { error?: string };
+          const body = (await response.json()) as { results: DayGroup[] } | { error?: string };
           if (!response.ok) {
             throw new Error(("error" in body && body.error) || `Haku epäonnistui (${date}).`);
           }
-          return body as GolfSearchResult;
+          return (body as { results: DayGroup[] }).results[0]!;
         })
       );
       onResults(results);

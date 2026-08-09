@@ -5,13 +5,13 @@ import { Search, ExternalLink, Lock } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Select } from "@/components/ui/Select";
 import { SegmentedControl } from "@/components/golf/SegmentedControl";
+import { ClubMultiSelect } from "@/components/golf/ClubMultiSelect";
 import { DateFormSearch } from "@/components/golf/DateFormSearch";
-import { DayResults } from "@/components/golf/DayResults";
+import { DayGroupResults } from "@/components/golf/DayGroupResults";
 import { parseGolfQuery, toSearchParams } from "@/lib/golf/parse-query";
 import { KLUBIT, DEFAULT_CLUB_ID, detectClub, getClub } from "@/lib/golf/clubs";
-import type { GolfSearchResult } from "@/lib/golf/types";
+import type { DayGroup } from "@/lib/golf/types";
 
 const QUICK_QUERIES = [
   "Huomenna",
@@ -34,36 +34,34 @@ interface ErrorBody {
 
 export function GolfSearch() {
   const [mode, setMode] = useState<Mode>("text");
-  const [clubId, setClubId] = useState(DEFAULT_CLUB_ID);
+  const [selectedClubs, setSelectedClubs] = useState<Set<string>>(new Set([DEFAULT_CLUB_ID]));
   const [text, setText] = useState("");
-  const [results, setResults] = useState<GolfSearchResult[] | null>(null);
+  const [results, setResults] = useState<DayGroup[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const activeClub = getClub(clubId) ?? KLUBIT[0]!;
 
   async function runTextSearch(query: string) {
     setLoading(true);
     setError(null);
 
-    // A club named in the text wins for this search and becomes the new
-    // dropdown selection too, so a follow-up quick-query button uses it.
+    // A club named in the text wins for this search and replaces the chip
+    // selection too, so a follow-up quick-query button uses it.
     const detected = detectClub(query);
-    const searchClubId = detected?.id ?? clubId;
-    if (detected && detected.id !== clubId) setClubId(detected.id);
+    const searchClubs = detected ? new Set([detected.id]) : selectedClubs;
+    if (detected) setSelectedClubs(searchClubs);
 
     try {
       const parsed = parseGolfQuery(query);
       const params = toSearchParams(parsed);
-      params.set("club", searchClubId);
+      params.set("club", Array.from(searchClubs).join(","));
       const response = await fetch(`/api/golf?${params.toString()}`);
-      const body = (await response.json()) as GolfSearchResult | { results: GolfSearchResult[] } | ErrorBody;
+      const body = (await response.json()) as { results: DayGroup[] } | ErrorBody;
 
       if (!response.ok) {
         throw new Error(("error" in body && body.error) || "Haku epäonnistui.");
       }
 
-      setResults("results" in body ? body.results : [body as GolfSearchResult]);
+      setResults("results" in body ? body.results : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Haku epäonnistui.");
       setResults(null);
@@ -83,7 +81,7 @@ export function GolfSearch() {
     void runTextSearch(text.trim());
   }
 
-  function handleFormResults(formResults: GolfSearchResult[]) {
+  function handleFormResults(formResults: DayGroup[]) {
     setResults(formResults);
     setLoading(false);
     setError(null);
@@ -95,26 +93,24 @@ export function GolfSearch() {
     setLoading(false);
   }
 
-  const totalFree = results?.reduce((sum, day) => sum + day.vapaat.length, 0) ?? 0;
+  const totalFree =
+    results?.reduce(
+      (sum, group) =>
+        sum +
+        group.clubs.reduce(
+          (clubSum, club) => clubSum + (club.status === "ok" ? club.vapaat.length : 0),
+          0
+        ),
+      0
+    ) ?? 0;
+
+  const activeClubs = Array.from(selectedClubs)
+    .map((id) => getClub(id))
+    .filter((club): club is NonNullable<typeof club> => Boolean(club));
 
   return (
     <div className="space-y-6">
-      <div className="max-w-xs">
-        <label className="mb-1.5 block text-xs font-semibold text-text-secondary" htmlFor="golf-club">
-          Klubi
-        </label>
-        <Select
-          id="golf-club"
-          value={clubId}
-          onChange={(event) => setClubId(event.target.value)}
-        >
-          {KLUBIT.map((club) => (
-            <option key={club.id} value={club.id}>
-              {club.nimi}
-            </option>
-          ))}
-        </Select>
-      </div>
+      <ClubMultiSelect selected={selectedClubs} onChange={setSelectedClubs} />
 
       <SegmentedControl label="Hakutapa" value={mode} onChange={setMode} options={MODE_OPTIONS} />
 
@@ -149,7 +145,7 @@ export function GolfSearch() {
         </div>
       ) : (
         <DateFormSearch
-          clubId={clubId}
+          selectedClubs={selectedClubs}
           onSearching={() => {
             setLoading(true);
             setError(null);
@@ -167,8 +163,8 @@ export function GolfSearch() {
 
       {results && (
         <div className="space-y-4">
-          {results.map((day) => (
-            <DayResults key={day.date} day={day} />
+          {results.map((group) => (
+            <DayGroupResults key={group.date} group={group} />
           ))}
           {totalFree === 0 && !error && (
             <Card>
@@ -180,19 +176,24 @@ export function GolfSearch() {
         </div>
       )}
 
-      <a
-        href={activeClub.bookingUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 text-sm font-medium text-accent transition-colors duration-150 hover:text-accent-hover"
-      >
-        Varaa aika WiseGolfissa ({activeClub.nimi})
-        <ExternalLink size={14} strokeWidth={1.75} />
-      </a>
+      <div className="flex flex-col gap-1.5">
+        {(activeClubs.length > 0 ? activeClubs : KLUBIT.slice(0, 1)).map((club) => (
+          <a
+            key={club.id}
+            href={club.bookingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-accent transition-colors duration-150 hover:text-accent-hover"
+          >
+            Varaa aika — {club.nimi}
+            <ExternalLink size={14} strokeWidth={1.75} />
+          </a>
+        ))}
+      </div>
 
       <p className="flex items-center gap-1.5 text-xs text-text-tertiary">
         <Lock size={12} strokeWidth={1.75} />
-        Vain haku — varaus tehdään aina käsin yllä olevasta linkistä.
+        Vain haku — varaus tehdään aina käsin yllä olevista linkeistä.
       </p>
     </div>
   );

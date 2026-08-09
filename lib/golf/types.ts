@@ -48,8 +48,26 @@ export interface FreeSlot {
   vapaita: number;
 }
 
-export interface GolfSearchResult {
-  date: string;
-  yhteensa: number;
+export type ClubDayStatus =
+  | "ok"
+  /** Requested date falls outside the club's configured season. */
+  | "kausi_kiinni"
+  /** Requested date is further out than the club's booking calendar reaches. */
+  | "liian_kaukana"
+  /** The club's own WiseGolf API call failed — doesn't take the rest of a
+   * multi-club search down with it. */
+  | "virhe";
+
+export interface ClubDayResult {
+  club: string;
+  nimi: string;
+  status: ClubDayStatus;
   vapaat: FreeSlot[];
+  /** Set only when status === "liian_kaukana": how far ahead this club's calendar goes. */
+  horisonttiPaivia?: number;
+}
+
+export interface DayGroup {
+  date: string;
+  clubs: ClubDayResult[];
 }
