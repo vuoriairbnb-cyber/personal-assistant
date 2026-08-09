@@ -18,16 +18,22 @@ const WEEKDAY_PATTERNS: { pattern: RegExp; index: number }[] = [
 ];
 
 /**
- * Next occurrence of ISO weekday `targetIdx` (0 = Monday). `skipThisWeek`
- * pushes past the nearest occurrence into the following week — the rule
- * this parser uses for "ensi X" ("next X"): plain "keskiviikkona" means the
- * nearest upcoming Wednesday (today counts), "ensi keskiviikkona" means the
- * Wednesday of the week after that.
+ * Next occurrence of ISO weekday `targetIdx` (0 = Monday), always in the
+ * future (today itself never counts, even if today is that weekday — an
+ * exact same-day match rolls over to next week). `pushExtraWeek` adds one
+ * more week on top of that — the rule for "seuraavan viikon X" ("the X of
+ * next week"), which is a distinct, deliberately-later request.
+ *
+ * Plain "keskiviikkona", "keskiviikko", and "ensi keskiviikkona" all resolve
+ * to the same date: the nearest upcoming Wednesday. In everyday Finnish
+ * "ensi X" is not a "skip a week" instruction — it means the same thing as
+ * plain "X" — so "ensi" has no effect here at all.
  */
-function nextWeekday(targetIdx: number, skipThisWeek: boolean, today: Date): Date {
+function nextWeekday(targetIdx: number, pushExtraWeek: boolean, today: Date): Date {
   const todayIdx = (today.getDay() + 6) % 7;
   let diff = (targetIdx - todayIdx + 7) % 7;
-  if (skipThisWeek) diff += 7;
+  if (diff === 0) diff = 7;
+  if (pushExtraWeek) diff += 7;
   return addDays(today, diff);
 }
 
@@ -45,7 +51,8 @@ export function parseGolfQuery(text: string, today: Date = new Date()): ParsedGo
   } else {
     const weekday = WEEKDAY_PATTERNS.find(({ pattern }) => pattern.test(q));
     if (weekday) {
-      query.date = format(nextWeekday(weekday.index, /\bensi\b/.test(q), today), "yyyy-MM-dd");
+      const pushExtraWeek = /seuraavan viikon/.test(q);
+      query.date = format(nextWeekday(weekday.index, pushExtraWeek, today), "yyyy-MM-dd");
     }
   }
 
