@@ -15,6 +15,12 @@ export type TripAiOutputStatus = "draft" | "approved" | "archived";
 export type ProfileStatus = "pending" | "approved" | "rejected";
 export type ProfileRole = "owner" | "family" | "user";
 
+export type CalendarConnectionProvider = "google" | "airbnb";
+export type CalendarConnectionStatus = "connected" | "syncing" | "error" | "disconnected";
+/** DB-level source — narrower than the client's CalendarEventSource: 'trip' is
+ * never stored here, it's synthesized at the query layer from the trips table. */
+export type CalendarEventDbSource = "manual" | "airbnb" | "google";
+
 export type Database = {
   public: {
     Tables: {
@@ -206,6 +212,80 @@ export type Database = {
           default_model?: string;
           currency?: string;
           language?: string;
+          [key: string]: unknown;
+        };
+        Relationships: [];
+      };
+      calendar_connections: {
+        Row: {
+          id: string;
+          user_id: string;
+          provider: CalendarConnectionProvider;
+          status: CalendarConnectionStatus;
+          last_synced_at: string | null;
+          error: string | null;
+          created_at: string;
+          updated_at: string;
+          [key: string]: unknown;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          provider: CalendarConnectionProvider;
+          status?: CalendarConnectionStatus;
+          last_synced_at?: string | null;
+          error?: string | null;
+          [key: string]: unknown;
+        };
+        Update: {
+          status?: CalendarConnectionStatus;
+          last_synced_at?: string | null;
+          error?: string | null;
+          [key: string]: unknown;
+        };
+        Relationships: [];
+      };
+      calendar_events: {
+        Row: {
+          id: string;
+          user_id: string;
+          connection_id: string | null;
+          source: CalendarEventDbSource;
+          external_id: string | null;
+          title: string;
+          description: string | null;
+          location: string | null;
+          start_at: string;
+          end_at: string;
+          all_day: boolean;
+          trip_id: string | null;
+          created_at: string;
+          updated_at: string;
+          [key: string]: unknown;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          connection_id?: string | null;
+          source: CalendarEventDbSource;
+          external_id?: string | null;
+          title: string;
+          description?: string | null;
+          location?: string | null;
+          start_at: string;
+          end_at: string;
+          all_day?: boolean;
+          trip_id?: string | null;
+          [key: string]: unknown;
+        };
+        Update: {
+          title?: string;
+          description?: string | null;
+          location?: string | null;
+          start_at?: string;
+          end_at?: string;
+          all_day?: boolean;
+          trip_id?: string | null;
           [key: string]: unknown;
         };
         Relationships: [];

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, useEffect } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { addMonths, endOfMonth, startOfMonth, subMonths } from "date-fns";
 import { CalendarHeader } from "@/components/calendar/CalendarHeader";
 import { MonthGrid } from "@/components/calendar/MonthGrid";
@@ -15,24 +15,23 @@ import { ConnectionsDialog } from "@/components/calendar/ConnectionsDialog";
 import { CalendarEmptyState } from "@/components/calendar/CalendarEmptyState";
 import { MobileCalendar } from "@/components/calendar/MobileCalendar";
 import { TabletCalendar } from "@/components/calendar/TabletCalendar";
-import { DEMO_NOW } from "@/lib/calendar/mock-data";
+import { deleteCalendarEvent, disconnectAirbnbCalendar, syncAirbnbCalendar } from "@/lib/actions/calendar";
 import { eventRange } from "@/lib/calendar/grid";
 import type {
   CalendarConnection,
   CalendarEvent,
   CalendarTripRef,
   CalendarViewMode,
-  ConnectionStatus,
+  ConnectionProvider,
 } from "@/lib/calendar/types";
 
-const SYNC_DURATION_MS = 1200;
-
 /**
- * Owns all calendar state. Desktop and mobile render the same data from here, so
- * switching viewport keeps the selected day, month and view in sync.
- *
- * `DEMO_NOW` stands in for the real clock while the module runs on mock data —
- * see lib/calendar/mock-data.ts.
+ * Owns UI-only navigation state (selected day, month, active view, dialog
+ * open/closed). `events`/`connections` come straight from props — they're
+ * real Supabase data fetched by the server component in
+ * app/(app)/calendar/page.tsx, and Server Actions + `revalidatePath("/calendar")`
+ * refresh those props automatically after any mutation, the same way editing
+ * a trip refreshes /trips/[id]. No client-side copy to keep in sync.
  */
 export function CalendarView({
   initialEvents,
@@ -43,63 +42,63 @@ export function CalendarView({
   initialConnections: CalendarConnection[];
   trips: CalendarTripRef[];
 }) {
-  const today = DEMO_NOW;
+  const [today] = useState(() => new Date());
+  const events = initialEvents;
+  const connections = initialConnections;
 
-  const [events, setEvents] = useState(initialEvents);
-  const [connections, setConnections] = useState(initialConnections);
   const [month, setMonth] = useState(() => startOfMonth(today));
   const [view, setView] = useState<CalendarViewMode>("month");
   const [selectedDate, setSelectedDate] = useState<Date | null>(today);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const [connectionsDialogOpen, setConnectionsDialogOpen] = useState(false);
 
-  const syncTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  useEffect(() => {
-    const timers = syncTimers.current;
-    return () => {
-      Object.values(timers).forEach(clearTimeout);
-    };
-  }, []);
+  // Server Actions run synchronously to completion before revalidating, so a
+  // connection's DB status never actually passes through the browser as
+  // "syncing" — this tracks the in-flight request client-side instead, purely
+  // to drive the spinner.
+  const [pendingProvider, setPendingProvider] = useState<ConnectionProvider | null>(null);
+  const [, startTransition] = useTransition();
 
-  const setStatus = useCallback((id: string, patch: Partial<CalendarConnection>) => {
-    setConnections((current) =>
-      current.map((connection) =>
-        connection.id === id ? { ...connection, ...patch } : connection
-      )
-    );
+  const displayConnections = useMemo(
+    () =>
+      connections.map((connection) =>
+        connection.provider === pendingProvider
+          ? { ...connection, status: "syncing" as const }
+          : connection
+      ),
+    [connections, pendingProvider]
+  );
+
+  const runAirbnbAction = useCallback((action: () => Promise<unknown>) => {
+    setPendingProvider("airbnb");
+    startTransition(async () => {
+      try {
+        await action();
+      } catch {
+        // The action already persisted the error onto the connection row
+        // (see syncAirbnbCalendar) — the refreshed props carry it forward.
+      } finally {
+        setPendingProvider(null);
+      }
+    });
   }, []);
 
   const handleSync = useCallback(
     (id: string) => {
-      setStatus(id, { status: "syncing", error: null });
-      clearTimeout(syncTimers.current[id]);
-      syncTimers.current[id] = setTimeout(() => {
-        setStatus(id, { status: "connected", lastSyncedAt: today.toISOString(), error: null });
-      }, SYNC_DURATION_MS);
+      const connection = connections.find((c) => c.id === id);
+      if (connection?.provider !== "airbnb") return;
+      runAirbnbAction(syncAirbnbCalendar);
     },
-    [setStatus, today]
+    [connections, runAirbnbAction]
   );
 
   const handleDisconnect = useCallback(
-    (id: string) => setStatus(id, { status: "disconnected", lastSyncedAt: null }),
-    [setStatus]
-  );
-
-  const handleConnect = useCallback((id: string) => handleSync(id), [handleSync]);
-
-  const handleSetStatus = useCallback(
-    (id: string, status: ConnectionStatus) => {
-      clearTimeout(syncTimers.current[id]);
-      if (status === "syncing") {
-        handleSync(id);
-        return;
-      }
-      setStatus(id, {
-        status,
-        error: status === "error" ? "Authorization expired. Reconnect to resume syncing." : null,
-      });
+    (id: string) => {
+      const connection = connections.find((c) => c.id === id);
+      if (connection?.provider !== "airbnb") return;
+      runAirbnbAction(disconnectAirbnbCalendar);
     },
-    [handleSync, setStatus]
+    [connections, runAirbnbAction]
   );
 
   const handleSelectDay = useCallback((day: Date) => {
@@ -111,13 +110,10 @@ export function CalendarView({
     setSelectedDate(eventRange(event).start);
   }, []);
 
-  const handleSaveEvent = useCallback((event: CalendarEvent) => {
-    setEvents((current) => [...current, event]);
-    setSelectedDate(eventRange(event).start);
-  }, []);
-
   const handleDeleteEvent = useCallback((id: string) => {
-    setEvents((current) => current.filter((event) => event.id !== id));
+    startTransition(() => {
+      deleteCalendarEvent(id);
+    });
   }, []);
 
   // Shared across the desktop, tablet and mobile tiers so all three stay in
@@ -220,11 +216,11 @@ export function CalendarView({
             ) : null}
 
             <ConnectedCalendarsPanel
-              connections={connections}
+              connections={displayConnections}
               now={today}
               onSync={handleSync}
               onDisconnect={handleDisconnect}
-              onConnect={handleConnect}
+              onConnect={handleSync}
               onManage={handleManageConnections}
             />
 
@@ -240,7 +236,7 @@ export function CalendarView({
         today={today}
         selectedDate={selectedDate}
         events={events}
-        connections={connections}
+        connections={displayConnections}
         showEmptyState={showEmptyState}
         onChangeView={setView}
         onPrev={handlePrevMonth}
@@ -254,7 +250,7 @@ export function CalendarView({
         onSeeAgenda={handleSeeAgenda}
         onSync={handleSync}
         onDisconnect={handleDisconnect}
-        onConnect={handleConnect}
+        onConnect={handleSync}
         onManage={handleManageConnections}
       />
 
@@ -265,7 +261,7 @@ export function CalendarView({
         selectedDate={activeDay}
         view={view}
         events={events}
-        connections={connections}
+        connections={displayConnections}
         onChangeView={setView}
         onPrev={handlePrevMonth}
         onNext={handleNextMonth}
@@ -278,7 +274,6 @@ export function CalendarView({
       <NewEventDialog
         open={eventDialogOpen}
         onClose={() => setEventDialogOpen(false)}
-        onSave={handleSaveEvent}
         trips={trips}
         defaultDate={activeDay}
       />
@@ -286,12 +281,11 @@ export function CalendarView({
       <ConnectionsDialog
         open={connectionsDialogOpen}
         onClose={() => setConnectionsDialogOpen(false)}
-        connections={connections}
+        connections={displayConnections}
         now={today}
         onSync={handleSync}
         onDisconnect={handleDisconnect}
-        onConnect={handleConnect}
-        onSetStatus={handleSetStatus}
+        onConnect={handleSync}
       />
     </>
   );

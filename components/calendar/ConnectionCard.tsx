@@ -28,6 +28,10 @@ export function ConnectionCard({
 }) {
   const badge = STATUS_BADGE[connection.status];
   const isSyncing = connection.status === "syncing";
+  // Google Calendar needs an OAuth client (Google Cloud credentials) that
+  // isn't wired up yet — show it as a real, honest "coming soon" card rather
+  // than a Connect button that would just fail.
+  const isComingSoon = connection.provider === "google";
 
   return (
     <div className="rounded-[14px] border border-border-subtle bg-card-hover p-3">
@@ -49,15 +53,19 @@ export function ConnectionCard({
       </div>
 
       <p className="mt-2.5 text-[12px] text-text-secondary">
-        {connection.status === "error"
-          ? (connection.error ?? "Sync failed.")
-          : connection.status === "disconnected"
-            ? "Connect to pull events into this calendar."
-            : formatRelativeTime(connection.lastSyncedAt, now)}
+        {isComingSoon
+          ? "Needs a Google Cloud OAuth client — not set up yet."
+          : connection.status === "error"
+            ? (connection.error ?? "Sync failed.")
+            : connection.status === "disconnected"
+              ? "Connect to pull events into this calendar."
+              : formatRelativeTime(connection.lastSyncedAt, now)}
       </p>
 
       <div className="mt-2.5 flex gap-2">
-        {connection.status === "disconnected" ? (
+        {isComingSoon ? (
+          <SmallButton disabled>Coming soon</SmallButton>
+        ) : connection.status === "disconnected" ? (
           <SmallButton variant="primary" onClick={() => onConnect(connection.id)}>
             <Plug size={12} />
             Connect

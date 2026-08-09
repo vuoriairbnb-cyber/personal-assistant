@@ -22,6 +22,7 @@ Copy `.env.example` to `.env.local` and fill in real values:
 | `ANTHROPIC_MODEL` | default model id if a user has no saved preference | server-only |
 | `NEXT_PUBLIC_SITE_URL` | builds the signup email-confirmation redirect | public |
 | `SIGNUP_INVITE_CODE` | required to complete signup at all | **server-only** |
+| `AIRBNB_ICAL_URL` | Airbnb "Export Calendar" iCal feed, synced into the Calendar module | **server-only** |
 
 `.env.local` is git-ignored. Never commit real keys. The app currently never
 imports `SUPABASE_SERVICE_ROLE_KEY` anywhere — all data access goes through
@@ -35,8 +36,10 @@ keep it out of any file reachable from a Client Component.
 1. Create a project at supabase.com.
 2. In the SQL editor, run, **in this exact order**:
    `db/migrations/0001_init.sql`, then `db/migrations/0002_approval_gate.sql`,
-   then `db/migrations/0003_fix_owner_bootstrap.sql`. Together they create:
-   - `profiles`, `trips`, `trip_ai_outputs`, `ai_cost_logs`, `app_settings`
+   then `db/migrations/0003_fix_owner_bootstrap.sql`, then
+   `db/migrations/0004_calendar.sql`. Together they create:
+   - `profiles`, `trips`, `trip_ai_outputs`, `ai_cost_logs`, `app_settings`,
+     `calendar_connections`, `calendar_events`
    - a trigger that creates a `profiles` row on signup (defaulting to
      `status = 'pending'`, `role = 'user'`)
    - Row Level Security policies scoping every table to `auth.uid()`, plus
@@ -110,7 +113,27 @@ owner, so it can't be triggered by a bug or a compromised session.
    someone to `owner` is intentionally not a button anywhere — it's the same
    one-time SQL snippet from the previous section, run manually in Supabase.
 
-## 4. Local development
+## 4. Calendar sync
+
+The Calendar module stores manual events for real (`calendar_events`,
+migration `0004`) and can sync one external source today:
+
+**Airbnb (iCal, live):**
+1. In your Airbnb host dashboard, go to Calendar → Availability → **Export
+   Calendar** and copy the iCal URL. The URL itself is a bearer secret —
+   anyone with it can read your reservation calendar — so treat it like a
+   password: never paste it into the app UI, a commit, or anywhere client-side.
+2. Set `AIRBNB_ICAL_URL` in `.env.local` (and in Vercel for production).
+3. In the app, go to **Calendar → Manage connections → Airbnb → Connect**.
+   This performs the first sync and creates your `calendar_connections` row;
+   **Sync now** repeats it on demand. There is no automatic background sync —
+   nothing fetches the feed until you click something.
+
+**Google Calendar (not built yet):** needs an OAuth client (client ID +
+secret) from a Google Cloud project, which only you can create — the
+Connection card shows as "Coming soon" until that's wired up.
+
+## 5. Local development
 
 ```bash
 npm install
@@ -124,7 +147,7 @@ account lands on `/pending-approval` until it's approved — see
 [Private access control](#3-private-access-control) above for making the
 first account the owner.
 
-## 5. Quality checks
+## 6. Quality checks
 
 ```bash
 npm run lint
@@ -132,7 +155,7 @@ npm run typecheck
 npm run build
 ```
 
-## 6. Deploying to Vercel
+## 7. Deploying to Vercel
 
 1. Import the repo into Vercel.
 2. Add the same environment variables from `.env.local` in Project Settings →
@@ -146,12 +169,17 @@ npm run build
 - The app never sends email automatically — email drafts are saved as
   `trip_ai_outputs` rows with `status: draft` for the user to copy or approve.
 - The app never books, purchases, or pays for anything.
-- The app never writes to a calendar (Calendar module is a placeholder).
-- `ANTHROPIC_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are only referenced from
-  files that import `"server-only"` (`lib/claude/*`, `lib/supabase/server.ts`,
-  `lib/cost/*`) or from Server Actions/Route Handlers — never from a file with
-  a `"use client"` directive. The same is true of `SIGNUP_INVITE_CODE`
-  (`lib/actions/auth.ts`).
+- The Calendar module only ever *reads* from external calendars (Airbnb
+  iCal today, Google Calendar once it exists) — synced events are always
+  read-only in the UI and nothing is ever written back to Google or Airbnb.
+  Only events you create yourself in the app (`source = 'manual'`) can be
+  edited or deleted, enforced both in the UI and server-side in
+  `lib/actions/calendar.ts`.
+- `ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `AIRBNB_ICAL_URL` are
+  only referenced from files that import `"server-only"` (`lib/claude/*`,
+  `lib/supabase/server.ts`, `lib/cost/*`, `lib/calendar/ical.ts`) or from
+  Server Actions/Route Handlers — never from a file with a `"use client"`
+  directive. The same is true of `SIGNUP_INVITE_CODE` (`lib/actions/auth.ts`).
 - No account can use any module until the owner approves it, and no account
   can become the owner except via the manual SQL snippet above — never
   through the app UI.

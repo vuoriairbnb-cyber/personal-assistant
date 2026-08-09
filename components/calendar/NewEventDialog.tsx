@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils/cn";
 import { Dialog } from "@/components/ui/Dialog";
+import { createCalendarEvent } from "@/lib/actions/calendar";
 import { formatDayRange } from "@/lib/calendar/format";
-import type { CalendarEvent, CalendarTripRef } from "@/lib/calendar/types";
+import type { CalendarTripRef } from "@/lib/calendar/types";
 
 const FIELD_CLASSES =
   "w-full rounded-md border border-border-default bg-card px-3 py-2 text-[13px] text-text-primary outline-none transition-shadow duration-150 placeholder:text-text-tertiary focus:border-accent focus:shadow-focus";
@@ -13,13 +14,11 @@ const FIELD_CLASSES =
 export function NewEventDialog({
   open,
   onClose,
-  onSave,
   trips,
   defaultDate,
 }: {
   open: boolean;
   onClose: () => void;
-  onSave: (event: CalendarEvent) => void;
   trips: CalendarTripRef[];
   defaultDate: Date;
 }) {
@@ -34,27 +33,26 @@ export function NewEventDialog({
   const [location, setLocation] = useState("");
   const [tripId, setTripId] = useState("");
   const [notes, setNotes] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
-  function handleSave() {
+  function handleSubmit(formData: FormData) {
     if (!title.trim()) return;
 
-    onSave({
-      id: `evt-${Date.now()}`,
-      title: title.trim(),
-      start: allDay ? `${startDate}T00:00:00` : `${startDate}T${startTime}:00`,
-      end: allDay ? `${endDate}T23:59:00` : `${endDate}T${endTime}:00`,
-      allDay,
-      source: "manual",
-      location: location.trim() || null,
-      notes: notes.trim() || null,
-      tripId: tripId || null,
+    formData.set("all_day", allDay ? "true" : "false");
+    setError(null);
+    startTransition(async () => {
+      try {
+        await createCalendarEvent(formData);
+        setTitle("");
+        setLocation("");
+        setNotes("");
+        setTripId("");
+        onClose();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not save the event.");
+      }
     });
-
-    setTitle("");
-    setLocation("");
-    setNotes("");
-    setTripId("");
-    onClose();
   }
 
   return (
@@ -72,20 +70,24 @@ export function NewEventDialog({
             Cancel
           </button>
           <button
-            type="button"
-            onClick={handleSave}
-            disabled={!title.trim()}
+            type="submit"
+            form="new-event-form"
+            disabled={!title.trim() || isPending}
             className="rounded-md bg-accent px-4 py-2 text-[13px] font-semibold text-accent-foreground transition-colors duration-150 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Save event
+            {isPending ? "Saving…" : "Save event"}
           </button>
         </>
       }
     >
-      <div className="space-y-3.5">
+      {error && (
+        <p className="mb-3 text-[13px] text-danger-strong">{error}</p>
+      )}
+      <form id="new-event-form" action={handleSubmit} className="space-y-3.5">
         <div className="flex items-end gap-3">
           <Field label="Title" className="flex-1">
             <input
+              name="title"
               className={FIELD_CLASSES}
               value={title}
               onChange={(event) => setTitle(event.target.value)}
@@ -120,6 +122,7 @@ export function NewEventDialog({
             <div className="flex gap-2">
               <input
                 type="date"
+                name="start_date"
                 className={FIELD_CLASSES}
                 value={startDate}
                 onChange={(event) => setStartDate(event.target.value)}
@@ -127,6 +130,7 @@ export function NewEventDialog({
               {!allDay && (
                 <input
                   type="time"
+                  name="start_time"
                   className={cn(FIELD_CLASSES, "w-[104px]")}
                   value={startTime}
                   onChange={(event) => setStartTime(event.target.value)}
@@ -138,6 +142,7 @@ export function NewEventDialog({
             <div className="flex gap-2">
               <input
                 type="date"
+                name="end_date"
                 className={FIELD_CLASSES}
                 value={endDate}
                 onChange={(event) => setEndDate(event.target.value)}
@@ -145,6 +150,7 @@ export function NewEventDialog({
               {!allDay && (
                 <input
                   type="time"
+                  name="end_time"
                   className={cn(FIELD_CLASSES, "w-[104px]")}
                   value={endTime}
                   onChange={(event) => setEndTime(event.target.value)}
@@ -156,6 +162,7 @@ export function NewEventDialog({
 
         <Field label="Location (optional)">
           <input
+            name="location"
             className={FIELD_CLASSES}
             value={location}
             onChange={(event) => setLocation(event.target.value)}
@@ -165,11 +172,15 @@ export function NewEventDialog({
 
         <Field label="Link to trip (optional)">
           <select
+            name="trip_id"
             className={FIELD_CLASSES}
             value={tripId}
             onChange={(event) => setTripId(event.target.value)}
+            disabled={trips.length === 0}
           >
-            <option value="">No linked trip</option>
+            <option value="">
+              {trips.length === 0 ? "No trips available yet" : "No linked trip"}
+            </option>
             {trips.map((trip) => (
               <option key={trip.id} value={trip.id}>
                 {`${trip.title} (${formatDayRange(trip.start, trip.end)})`}
@@ -180,6 +191,7 @@ export function NewEventDialog({
 
         <Field label="Notes (optional)">
           <textarea
+            name="notes"
             rows={3}
             className={cn(FIELD_CLASSES, "resize-none")}
             value={notes}
@@ -187,7 +199,7 @@ export function NewEventDialog({
             placeholder="Catch up on Q2 planning and goals."
           />
         </Field>
-      </div>
+      </form>
     </Dialog>
   );
 }
