@@ -52,6 +52,19 @@ export const KLUBIT: GolfClubConfig[] = [
     kausi: { alkaa: "04-09", loppuu: "10-19" },
     horisonttiPaivia: 8,
   },
+  {
+    id: "tapiola",
+    nimi: "Tapiola Golf",
+    domain: "api.tapiolagolf.fi",
+    productid: 7,
+    aliases: ["tapiola golf", "tapiola"],
+    // No confirmed WiseGolf reservation deep-link for Tapiola either —
+    // same call as Kullo: their own homepage, not a guessed booking path.
+    bookingUrl: "https://tapiolagolf.fi",
+    // Verified open 2025-11-01–2026-11-17 — effectively year-round like HGK,
+    // no kausi restriction needed.
+    horisonttiPaivia: 5,
+  },
   // <KLUBIT> — lisää tähän vain todennettuja klubeja samassa muodossa.
 ];
 
