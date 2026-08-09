@@ -1,4 +1,4 @@
-import { LayoutDashboard, Map, Inbox, Calendar, Receipt, Settings } from "lucide-react";
+import { LayoutDashboard, Map, Inbox, Calendar, Flag, Receipt, Settings } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export interface NavItem {
@@ -12,6 +12,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/trips", label: "Trips", icon: Map },
   { href: "/inbox", label: "Inbox", icon: Inbox },
   { href: "/calendar", label: "Calendar", icon: Calendar },
+  { href: "/golf", label: "Golf", icon: Flag },
   { href: "/costs", label: "AI costs", icon: Receipt },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
