@@ -5,13 +5,13 @@ import { Search, ExternalLink, Lock } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { SegmentedControl } from "@/components/golf/SegmentedControl";
 import { DateFormSearch } from "@/components/golf/DateFormSearch";
 import { DayResults } from "@/components/golf/DayResults";
 import { parseGolfQuery, toSearchParams } from "@/lib/golf/parse-query";
+import { KLUBIT, DEFAULT_CLUB_ID, detectClub, getClub } from "@/lib/golf/clubs";
 import type { GolfSearchResult } from "@/lib/golf/types";
-
-const BOOKING_URL = "https://app.wisegolf.fi/#/golf/reservation/7";
 
 const QUICK_QUERIES = [
   "Huomenna",
@@ -34,18 +34,28 @@ interface ErrorBody {
 
 export function GolfSearch() {
   const [mode, setMode] = useState<Mode>("text");
+  const [clubId, setClubId] = useState(DEFAULT_CLUB_ID);
   const [text, setText] = useState("");
   const [results, setResults] = useState<GolfSearchResult[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const activeClub = getClub(clubId) ?? KLUBIT[0]!;
+
   async function runTextSearch(query: string) {
     setLoading(true);
     setError(null);
 
+    // A club named in the text wins for this search and becomes the new
+    // dropdown selection too, so a follow-up quick-query button uses it.
+    const detected = detectClub(query);
+    const searchClubId = detected?.id ?? clubId;
+    if (detected && detected.id !== clubId) setClubId(detected.id);
+
     try {
       const parsed = parseGolfQuery(query);
       const params = toSearchParams(parsed);
+      params.set("club", searchClubId);
       const response = await fetch(`/api/golf?${params.toString()}`);
       const body = (await response.json()) as GolfSearchResult | { results: GolfSearchResult[] } | ErrorBody;
 
@@ -89,6 +99,23 @@ export function GolfSearch() {
 
   return (
     <div className="space-y-6">
+      <div className="max-w-xs">
+        <label className="mb-1.5 block text-xs font-semibold text-text-secondary" htmlFor="golf-club">
+          Klubi
+        </label>
+        <Select
+          id="golf-club"
+          value={clubId}
+          onChange={(event) => setClubId(event.target.value)}
+        >
+          {KLUBIT.map((club) => (
+            <option key={club.id} value={club.id}>
+              {club.nimi}
+            </option>
+          ))}
+        </Select>
+      </div>
+
       <SegmentedControl label="Hakutapa" value={mode} onChange={setMode} options={MODE_OPTIONS} />
 
       {mode === "text" ? (
@@ -122,6 +149,7 @@ export function GolfSearch() {
         </div>
       ) : (
         <DateFormSearch
+          clubId={clubId}
           onSearching={() => {
             setLoading(true);
             setError(null);
@@ -153,12 +181,12 @@ export function GolfSearch() {
       )}
 
       <a
-        href={BOOKING_URL}
+        href={activeClub.bookingUrl}
         target="_blank"
         rel="noopener noreferrer"
         className="inline-flex items-center gap-1.5 text-sm font-medium text-accent transition-colors duration-150 hover:text-accent-hover"
       >
-        Varaa aika WiseGolfissa
+        Varaa aika WiseGolfissa ({activeClub.nimi})
         <ExternalLink size={14} strokeWidth={1.75} />
       </a>
 

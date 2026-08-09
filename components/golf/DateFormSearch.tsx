@@ -25,10 +25,12 @@ const TIME_INPUT_CLASSES =
   "h-9 rounded-sm border border-border-default bg-canvas px-2 text-sm text-text-primary outline-none focus-visible:border-accent";
 
 export function DateFormSearch({
+  clubId,
   onSearching,
   onResults,
   onError,
 }: {
+  clubId: string;
   onSearching: () => void;
   onResults: (results: GolfSearchResult[]) => void;
   onError: (message: string) => void;
@@ -66,7 +68,7 @@ export function DateFormSearch({
     setSubmitting(true);
     onSearching();
 
-    const params: Record<string, string> = { min: String(players) };
+    const params: Record<string, string> = { club: clubId, min: String(players) };
     if (timeMode === "after") params.after = afterTime;
     else if (timeMode === "before") params.before = beforeTime;
     else if (timeMode === "between") {
