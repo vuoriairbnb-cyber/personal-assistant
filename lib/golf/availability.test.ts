@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { computeFreeSlots } from "./availability.ts";
+import { computeFreeSlots, getCalendarVisibility } from "./availability.ts";
 import type { CalendarSettingsResponse, ReservationRow } from "./types.ts";
 
 const date = "2026-08-11";
@@ -67,4 +67,72 @@ test("SHG resource rows remain isolated", () => {
   const rows = [row("08:00", 1), row("08:00", 1), row("08:00", 2)];
   assert.equal(availability(rows, 1, "08:00"), 2);
   assert.equal(availability(rows, 2, "08:00"), 3);
+});
+
+test("Kytäjä North West keeps its 07:05 cadence and counts status 4 capacity rows", () => {
+  const kytajaSettings: CalendarSettingsResponse = {
+    ...settings,
+    reservationSettings: {
+      ...settings.reservationSettings,
+      startTime: "07:05:00",
+      endTime: "20:05:00",
+      resources: [{ resourceId: 1, quantity: 4 }],
+    },
+  };
+  const rows = [
+    row("07:05", 1),
+    ...Array.from({ length: 3 }, () => row("07:15", 1)),
+    ...Array.from({ length: 4 }, () => row("09:35", 1)),
+    ...Array.from({ length: 4 }, () => row("09:45", 1)),
+    ...Array.from({ length: 4 }, () => row("10:05", 1, 1, 4)),
+    ...Array.from({ length: 4 }, () => row("10:15", 1, 1, 4)),
+    ...Array.from({ length: 4 }, () => row("10:45", 1, 1, 4)),
+    ...Array.from({ length: 4 }, () => row("14:35", 1, 1, 4)),
+    ...Array.from({ length: 2 }, () => row("16:05", 1, 1, 2)),
+    ...Array.from({ length: 2 }, () => row("16:05", 1, 1, 4)),
+  ];
+  const slots = computeFreeSlots(date, kytajaSettings, rows, new Date("2026-08-01T00:00:00Z"), 1);
+  const at = (time: string) => slots.find((slot) => slot.aika === time)?.availablePlayers;
+
+  assert.equal(at("07:05"), 3);
+  assert.equal(at("07:15"), 1);
+  assert.equal(at("07:00"), undefined);
+  for (const time of ["09:35", "09:45", "10:05", "10:15", "10:45", "14:35", "16:05"]) {
+    assert.equal(at(time), undefined);
+  }
+});
+
+test("Kytäjä South East keeps its independent 07:00 cadence", () => {
+  const southEastSettings: CalendarSettingsResponse = {
+    ...settings,
+    reservationSettings: {
+      ...settings.reservationSettings,
+      startTime: "07:00:00",
+      endTime: "20:00:00",
+      resources: [{ resourceId: 2, quantity: 4 }],
+    },
+  };
+  const slots = computeFreeSlots(date, southEastSettings, [], new Date("2026-08-01T00:00:00Z"), 2);
+  assert.deepEqual(slots.slice(0, 3).map((slot) => slot.aika), ["07:00", "07:10", "07:20"]);
+});
+
+test("Kytäjä visibility uses the active seven-day API rule without inventing an opening clock", () => {
+  assert.deepEqual(
+    getCalendarVisibility(
+      [{
+        ruleName: "kalenteriNakyvyysPaivat",
+        resourceId: 1,
+        startDate: null,
+        endDate: null,
+        startTime: "00:00:00",
+        endTime: "23:59:00",
+        recurrenceDays: null,
+        ruleValue: 7,
+      }],
+      date,
+      1,
+      7
+    ),
+    { days: 7 }
+  );
 });

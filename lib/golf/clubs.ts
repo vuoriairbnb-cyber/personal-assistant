@@ -306,6 +306,45 @@ export const KLUBIT: GolfClub[] = [
       },
     ],
   },
+  {
+    id: "kytaja",
+    nimi: "Kytäjä Golf",
+    domain: "api.kytajagolf.fi",
+    aliases: ["kytäjä golf", "kytäjä", "kytaja golf", "kytaja"],
+    bookingUrl: "https://kytajagolf.fi",
+    kentat: [
+      {
+        id: "north-west",
+        nimi: "North West",
+        productid: 22,
+        resourceId: 1,
+        aliases: ["kytäjä north west", "kytäjä nw", "kytaja north west", "kytaja nw", "north west", "nw"],
+        tarkkaKausi: { alkaa: "2025-04-01", loppuu: "2026-10-31" },
+        // The API supplies calendar visibility (currently 7 days) but no
+        // opening clock, so no time is inferred here.
+        horisonttiPaivia: 7,
+        horisonttiCalendarista: true,
+        paikkoja: 4,
+        lahtovaliMin: 10,
+        paivanAlku: "07:05",
+        paivanLoppu: "20:05",
+      },
+      {
+        id: "south-east",
+        nimi: "South East",
+        productid: 70,
+        resourceId: 2,
+        aliases: ["kytäjä south east", "kytäjä se", "kytaja south east", "kytaja se", "south east", "se"],
+        tarkkaKausi: { alkaa: "2025-04-01", loppuu: "2026-09-27" },
+        horisonttiPaivia: 7,
+        horisonttiCalendarista: true,
+        paikkoja: 4,
+        lahtovaliMin: 10,
+        paivanAlku: "07:00",
+        paivanLoppu: "20:00",
+      },
+    ],
+  },
 ];
 
 export const DEFAULT_CLUB_ID = KLUBIT[0]!.id;
