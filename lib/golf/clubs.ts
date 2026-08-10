@@ -65,6 +65,19 @@ export const KLUBIT: GolfClubConfig[] = [
     // no kausi restriction needed.
     horisonttiPaivia: 5,
   },
+  {
+    id: "hirsala",
+    nimi: "Hirsala Golf",
+    domain: "api.hirsalagolf.fi",
+    productid: 7,
+    aliases: ["hirsala golf", "hirsala"],
+    // No confirmed WiseGolf reservation deep-link for Hirsala either —
+    // same call as Kullo/Tapiola: their own homepage, not a guessed path.
+    bookingUrl: "https://hirsalagolf.fi",
+    // Verified open 2024-03-29–2026-12-31 — effectively year-round, no
+    // kausi restriction needed.
+    horisonttiPaivia: 7,
+  },
   // <KLUBIT> — lisää tähän vain todennettuja klubeja samassa muodossa.
 ];
 
