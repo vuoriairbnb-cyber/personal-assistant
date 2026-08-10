@@ -65,7 +65,7 @@ export async function fetchOmatVaraukset(): Promise<OmatVarauksetResult> {
     return { status: "virhe", events: [] };
   }
 
-  if (!data.success) {
+  if (!data.success || !Array.isArray(data.rows)) {
     return { status: "virhe", events: [] };
   }
 

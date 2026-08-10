@@ -13,10 +13,10 @@ export default async function CalendarPage() {
   const [events, connections, golfResult] = await Promise.all([
     listCalendarEvents(),
     listCalendarConnections(),
-    // Golf reservations are fetched live (never stored in Supabase). A missing
-    // or expired HGK_SESSION_COOKIE returns an empty list — never crashes the
-    // calendar. Read-only; no write path exists.
-    fetchOmatVaraukset(),
+    // Golf reservations are fetched live (never stored in Supabase). Any
+    // failure — missing cookie, expired session, unexpected API response —
+    // returns an empty list so the calendar never crashes.
+    fetchOmatVaraukset().catch(() => ({ status: "virhe" as const, events: [] })),
   ]);
 
   const allEvents = [...events, ...golfResult.events];
