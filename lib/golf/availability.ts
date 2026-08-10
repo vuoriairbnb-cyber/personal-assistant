@@ -1,4 +1,10 @@
-import type { CalendarSettingsResponse, FreeSlot, ReservationRow, ResourceRule } from "@/lib/golf/types";
+import type {
+  CalendarSettingsResponse,
+  FreeSlot,
+  ReservationRow,
+  ResourceRule,
+  WiseGolfRuleValue,
+} from "@/lib/golf/types";
 
 function toMinutes(time: string): number {
   const parts = time.split(":");
@@ -28,6 +34,18 @@ function isRuleActiveOn(rule: ResourceRule, date: string, weekday: number): bool
 /** Is `slotMinutes` inside an active aikaSulku (time-closure) rule for this date? */
 function ruleMatchesResource(rule: ResourceRule, resourceId?: number): boolean {
   return resourceId === undefined || rule.resourceId === null || rule.resourceId === undefined || rule.resourceId === resourceId;
+}
+
+/** Normalizes both WiseGolf kuumatAjat formats: `{ minutes: N }` and `N`. */
+export function getHotRuleMinutes(ruleValue: WiseGolfRuleValue | undefined): number | null {
+  const minutes = typeof ruleValue === "number" ? ruleValue : ruleValue?.minutes;
+  return typeof minutes === "number" && Number.isFinite(minutes) && minutes >= 0 ? minutes : null;
+}
+
+function getRuleMessage(ruleValue: WiseGolfRuleValue | undefined): string | undefined {
+  return ruleValue && typeof ruleValue === "object" && typeof ruleValue.message === "string"
+    ? ruleValue.message
+    : undefined;
 }
 
 function isClosed(
@@ -102,18 +120,17 @@ function openingRestriction(
       isRuleActiveOn(candidate, date, weekday) &&
       slotMinutes >= toMinutes(candidate.startTime) &&
       slotMinutes < toMinutes(candidate.endTime) &&
-      typeof candidate.ruleValue?.minutes === "number" &&
-      Number.isFinite(candidate.ruleValue.minutes) &&
-      candidate.ruleValue.minutes >= 0
+      getHotRuleMinutes(candidate.ruleValue) !== null
   );
-  if (!rule || rule.ruleValue?.minutes === undefined) return undefined;
+  const minutesBefore = rule ? getHotRuleMinutes(rule.ruleValue) : null;
+  if (!rule || minutesBefore === null) return undefined;
 
-  const opensAt = new Date(helsinkiTeeTime(date, slotMinutes).getTime() - rule.ruleValue.minutes * 60_000);
+  const opensAt = new Date(helsinkiTeeTime(date, slotMinutes).getTime() - minutesBefore * 60_000);
   return {
     type: "opens_before_start",
-    minutesBefore: rule.ruleValue.minutes,
+    minutesBefore,
     opensAt: toHelsinkiIso(opensAt),
-    ...(typeof rule.ruleValue.message === "string" ? { message: rule.ruleValue.message } : {}),
+    ...(getRuleMessage(rule.ruleValue) ? { message: getRuleMessage(rule.ruleValue) } : {}),
   };
 }
 

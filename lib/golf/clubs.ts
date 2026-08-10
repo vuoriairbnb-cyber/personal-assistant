@@ -241,6 +241,41 @@ export const KLUBIT: GolfClub[] = [
       },
     ],
   },
+  {
+    id: "shg",
+    nimi: "Suur-Helsingin Golf",
+    domain: "api.shg.fi",
+    aliases: ["suur-helsingin golf", "suur helsingin golfseura", "suur helsingin golf", "shg"],
+    bookingUrl: "https://shg.fi",
+    kentat: [
+      {
+        id: "luukki",
+        nimi: "Luukki",
+        productid: 53,
+        resourceId: 1,
+        aliases: ["shg luukki", "luukki"],
+        // limitFutureReservations currently returns 3; product startDate
+        // (2022) is deliberately not treated as a recurring season boundary.
+        horisonttiPaivia: 3,
+        paikkoja: 4,
+        lahtovaliMin: 10,
+        paivanAlku: "06:00",
+        paivanLoppu: "21:00",
+      },
+      {
+        id: "lakisto",
+        nimi: "Lakisto",
+        productid: 53,
+        resourceId: 2,
+        aliases: ["shg lakisto", "lakisto"],
+        horisonttiPaivia: 3,
+        paikkoja: 4,
+        lahtovaliMin: 10,
+        paivanAlku: "06:00",
+        paivanLoppu: "21:00",
+      },
+    ],
+  },
 ];
 
 export const DEFAULT_CLUB_ID = KLUBIT[0]!.id;

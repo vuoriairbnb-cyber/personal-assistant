@@ -21,6 +21,17 @@ export interface ReservationsResponse {
   // client. See "Henkilötiedot" in CLAUDE-golf.md.
 }
 
+export interface WiseGolfRuleValueObject {
+  comment?: string;
+  /** kuumatAjat: this tee time opens this many minutes before its start. */
+  minutes?: number;
+  inheritToOthers?: boolean;
+  message?: string;
+}
+
+/** WiseGolf returns rule values either as an object or, for some rules, a number. */
+export type WiseGolfRuleValue = WiseGolfRuleValueObject | number;
+
 export interface ResourceRule {
   resourceId?: number | null;
   ruleName: string;
@@ -30,13 +41,7 @@ export interface ResourceRule {
   endTime: string;
   /** 7 booleans, index 0 = Monday. null means "every day" within the date range. */
   recurrenceDays: boolean[] | null;
-  ruleValue?: {
-    comment?: string;
-    /** kuumatAjat: this tee time opens this many minutes before its start. */
-    minutes?: number;
-    inheritToOthers?: boolean;
-    message?: string;
-  };
+  ruleValue?: WiseGolfRuleValue;
 }
 
 export interface CalendarSettingsResponse {
