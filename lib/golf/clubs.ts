@@ -171,6 +171,30 @@ export const KLUBIT: GolfClub[] = [
       },
     ],
   },
+  {
+    id: "keimola",
+    nimi: "Keimola Golf",
+    domain: "api.keimolagolf.com",
+    aliases: ["keimola golf", "keimola"],
+    bookingUrl: "https://keimolagolf.com",
+    // Saras is intentionally the only configured/searchable Keimola course.
+    // Kirkka and its internal ball-run views are not user-facing courses and
+    // therefore have no entry here.
+    kentat: [
+      {
+        id: "saras",
+        nimi: "Saras",
+        productid: 166,
+        aliases: ["keimola saras", "saras"],
+        horisonttiPaivia: 5,
+        horisonttiAukeaa: "21:00",
+        paikkoja: 4,
+        lahtovaliMin: 10,
+        paivanAlku: "05:00",
+        paivanLoppu: "22:00",
+      },
+    ],
+  },
 ];
 
 export const DEFAULT_CLUB_ID = KLUBIT[0]!.id;
