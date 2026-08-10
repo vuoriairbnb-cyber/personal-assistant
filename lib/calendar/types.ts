@@ -2,7 +2,7 @@
 // future `calendar_events` / `calendar_connections` table pair, so swapping the
 // mock data for real Supabase queries won't require touching any component.
 
-export type CalendarEventSource = "manual" | "trip" | "google" | "airbnb";
+export type CalendarEventSource = "manual" | "trip" | "google" | "airbnb" | "golf";
 
 export interface CalendarEvent {
   id: string;

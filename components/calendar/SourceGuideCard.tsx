@@ -1,4 +1,4 @@
-import { CalendarDays, Plane, Lock, PenLine } from "lucide-react";
+import { CalendarDays, Plane, Lock, PenLine, Flag } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { SOURCE_ORDER, SOURCE_STYLES } from "@/lib/calendar/source-styles";
 import type { CalendarEventSource } from "@/lib/calendar/types";
@@ -8,6 +8,7 @@ const ICONS: Record<CalendarEventSource, LucideIcon> = {
   trip: Plane,
   google: CalendarDays,
   airbnb: Lock,
+  golf: Flag,
 };
 
 /** Explains why the four sources look different and which of them you can edit. */

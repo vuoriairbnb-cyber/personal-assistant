@@ -5,6 +5,7 @@ const SHORT_LABELS: Record<string, string> = {
   trip: "Trip",
   google: "Google",
   airbnb: "Airbnb",
+  golf: "Golf (HGK)",
 };
 
 export function LegendCard() {

@@ -59,9 +59,18 @@ export const SOURCE_STYLES: Record<CalendarEventSource, SourceStyle> = {
     editable: false,
     synced: true,
   },
+  golf: {
+    label: "Golf (HGK)",
+    description: "Omat golfvaraukset Helsingin Golfklubilta. Vain luku.",
+    dot: "#2D7D46",
+    chip: "bg-[#E8F5EC] text-[#1B5E30] border-[#C6E6CF]",
+    bar: "bg-[#E8F5EC] text-[#1B5E30] border-[#B5DCC0]",
+    editable: false,
+    synced: false,
+  },
 };
 
-export const SOURCE_ORDER: CalendarEventSource[] = ["manual", "trip", "google", "airbnb"];
+export const SOURCE_ORDER: CalendarEventSource[] = ["manual", "trip", "google", "airbnb", "golf"];
 
 /**
  * Trips alternate between two warm accents so two overlapping trips stay

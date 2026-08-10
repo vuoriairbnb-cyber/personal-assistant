@@ -25,6 +25,9 @@ export interface GolfClubConfig {
   kausi?: SeasonWindow;
   /** Days ahead the calendar is open. null/omitted = DEFAULT_HORISONTTI_PAIVIA (HGK's value). */
   horisonttiPaivia?: number | null;
+  /** True for clubs where fetching the user's own reservations via the
+   * authenticated WiseGolf endpoint is supported and configured. */
+  omatVarauksetTuettu?: boolean;
 }
 
 /** Fallback booking horizon for any club that doesn't set its own (HGK's confirmed value). */
@@ -39,6 +42,7 @@ export const KLUBIT: GolfClubConfig[] = [
     aliases: ["helsingin golfklubi", "hgk"],
     bookingUrl: "https://app.wisegolf.fi/#/golf/reservation/7",
     horisonttiPaivia: null,
+    omatVarauksetTuettu: true,
   },
   {
     id: "kullo",
