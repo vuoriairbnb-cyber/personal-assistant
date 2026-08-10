@@ -6,7 +6,8 @@
 export interface SeasonWindow {
   /** "MM-DD", inclusive. */
   alkaa: string;
-  loppuu: string;
+  /** Omit or set null when WiseGolf has no configured end date. */
+  loppuu?: string | null;
 }
 
 export interface GolfCourse {
@@ -23,6 +24,8 @@ export interface GolfCourse {
   /** Informational course metadata; live calendar settings remain authoritative. */
   paikkoja?: number;
   lahtovaliMin?: number;
+  paivanAlku?: string;
+  paivanLoppu?: string;
 }
 
 export interface GolfClub {
@@ -133,6 +136,41 @@ export const KLUBIT: GolfClub[] = [
       },
     ],
   },
+  {
+    id: "mastergolf",
+    nimi: "Master Golf",
+    domain: "api.mastergolf.fi",
+    aliases: ["master golf"],
+    bookingUrl: "https://mastergolf.fi",
+    kentat: [
+      {
+        id: "master",
+        nimi: "Master",
+        productid: 7,
+        aliases: ["master"],
+        kausi: { alkaa: "04-10", loppuu: null },
+        horisonttiPaivia: 3,
+        horisonttiAukeaa: "06:00",
+        paikkoja: 4,
+        lahtovaliMin: 10,
+        paivanAlku: "06:00",
+        paivanLoppu: "20:10",
+      },
+      {
+        id: "forest",
+        nimi: "Forest",
+        productid: 65,
+        aliases: ["master golf forest", "master forest", "forest"],
+        kausi: { alkaa: "04-17", loppuu: null },
+        horisonttiPaivia: 3,
+        horisonttiAukeaa: "06:00",
+        paikkoja: 4,
+        lahtovaliMin: 10,
+        paivanAlku: "06:00",
+        paivanLoppu: "20:10",
+      },
+    ],
+  },
 ];
 
 export const DEFAULT_CLUB_ID = KLUBIT[0]!.id;
@@ -150,21 +188,41 @@ export function detectClub(text: string): GolfClub | null {
   return KLUBIT.find((club) => club.aliases.some((alias) => lower.includes(alias))) ?? null;
 }
 
-/** Finds a course only when its alias identifies exactly one configured course. */
+/**
+ * Finds a course only when the best matching alias identifies it uniquely.
+ * Longer aliases let qualified input ("Master Forest") resolve safely while
+ * a bare ambiguous name ("Forest") deliberately remains unresolved.
+ */
 export function detectCourse(text: string, withinClub?: GolfClub | null) {
   const lower = text.toLowerCase();
+  // A course name can be part of its club name ("Master" / "Master Golf").
+  // When a club has already been identified, remove its longest aliases first
+  // before looking for a course. This is configuration-driven and works for
+  // any future club/course naming overlap.
+  const courseText = withinClub
+    ? [...withinClub.aliases]
+        .sort((a, b) => b.length - a.length)
+        .reduce((remaining, alias) => remaining.replaceAll(alias, " "), lower)
+    : lower;
   const candidates = (withinClub ? [withinClub] : KLUBIT).flatMap((club) =>
-    club.kentat
-      .filter((course) => course.aliases?.some((alias) => lower.includes(alias)))
-      .map((course) => ({ club, course }))
+    club.kentat.flatMap((course) => {
+      const longestMatch = Math.max(
+        0,
+        ...(course.aliases ?? []).filter((alias) => courseText.includes(alias)).map((alias) => alias.length)
+      );
+      return longestMatch > 0 ? [{ club, course, longestMatch }] : [];
+    })
   );
-  return candidates.length === 1 ? candidates[0] : null;
+  const bestLength = Math.max(0, ...candidates.map((candidate) => candidate.longestMatch));
+  const best = candidates.filter((candidate) => candidate.longestMatch === bestLength);
+  return best.length === 1 ? best[0] : null;
 }
 
 export function isInSeason(course: GolfCourse, date: string): boolean {
   if (!course.kausi) return true;
   const mmdd = date.slice(5);
   const { alkaa, loppuu } = course.kausi;
+  if (!loppuu) return mmdd >= alkaa;
   if (alkaa <= loppuu) return mmdd >= alkaa && mmdd <= loppuu;
   return mmdd >= alkaa || mmdd <= loppuu;
 }
