@@ -4,11 +4,38 @@ import type {
   ReservationRow,
   ResourceRule,
   WiseGolfRuleValue,
-} from "@/lib/golf/types";
+} from "./types.ts";
 
 function toMinutes(time: string): number {
   const parts = time.split(":");
   return Number(parts[0] ?? 0) * 60 + Number(parts[1] ?? 0);
+}
+
+function sameResourceId(left: number | string | null | undefined, right: number | string): boolean {
+  return Number(left) === Number(right);
+}
+
+function positiveQuantity(value: number | string | null | undefined): number {
+  const quantity = Number(value ?? 0);
+  return Number.isFinite(quantity) && quantity > 0 ? quantity : 0;
+}
+
+/**
+ * Returns the capacity consumed by one reservation row for one resource.
+ * WiseGolf multi-resource products identify the target course in
+ * `row.resources[]`; older single-resource responses can still use the
+ * legacy top-level `row.resourceId`.
+ */
+export function getRowResourceQuantity(row: ReservationRow, resourceId?: number): number {
+  if (resourceId === undefined) return positiveQuantity(row.quantity);
+
+  if (Array.isArray(row.resources)) {
+    return row.resources
+      .filter((resource) => sameResourceId(resource.resourceId, resourceId))
+      .reduce((total, resource) => total + positiveQuantity(resource.quantity), 0);
+  }
+
+  return sameResourceId(row.resourceId, resourceId) ? positiveQuantity(row.quantity) : 0;
 }
 
 function minutesToHHMM(minutes: number): string {
@@ -180,8 +207,8 @@ function openingRestriction(
 /**
  * Free tee times for one day. Every parameter (opening hours, slot length,
  * capacity, closures) is read from `settings` — never hardcoded, since the
- * club can change any of them. `rows` must already be booked seats for
- * exactly `date` (one row = one occupied seat at that start time).
+ * club can change any of them. `rows` are capacity rows for exactly `date`;
+ * their resource-specific quantities determine occupied seats.
  */
 export function computeFreeSlots(
   date: string,
@@ -193,7 +220,7 @@ export function computeFreeSlots(
   const { startTime, endTime, duration, breakTime, resources } = settings.reservationSettings;
   const resource = resourceId === undefined
     ? resources[0]
-    : resources.find((item) => item.id === resourceId || item.resourceId === resourceId);
+    : resources.find((item) => sameResourceId(item.id, resourceId) || sameResourceId(item.resourceId, resourceId));
   const quantity = resource?.quantity ?? 0;
   const step = duration + breakTime;
   if (step <= 0 || quantity <= 0) return [];
@@ -202,11 +229,12 @@ export function computeFreeSlots(
 
   const bookedCounts = new Map<string, number>();
   for (const row of rows) {
-    if (resourceId !== undefined && row.resourceId !== resourceId) continue;
+    const occupied = getRowResourceQuantity(row, resourceId);
+    if (occupied === 0) continue;
     const [rowDate, rowTime] = row.start.split(" ");
     if (rowDate !== date || !rowTime) continue;
     const key = rowTime.slice(0, 5); // "HH:MM"
-    bookedCounts.set(key, (bookedCounts.get(key) ?? 0) + 1);
+    bookedCounts.set(key, (bookedCounts.get(key) ?? 0) + occupied);
   }
 
   const slots: FreeSlot[] = [];
@@ -215,7 +243,7 @@ export function computeFreeSlots(
   for (let t = start; t < end; t += step) {
     if (isClosed(settings.resourceRules, date, weekday, t, resourceId)) continue;
     const aika = minutesToHHMM(t);
-    const availablePlayers = quantity - (bookedCounts.get(aika) ?? 0);
+    const availablePlayers = Math.max(0, quantity - (bookedCounts.get(aika) ?? 0));
     if (availablePlayers > 0) {
       const bookingRestriction = openingRestriction(settings.resourceRules, date, weekday, t, resourceId);
       slots.push({

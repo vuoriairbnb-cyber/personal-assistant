@@ -8,8 +8,16 @@ export interface ReservationRow {
   end: string;
   status: number;
   quantity: number;
-  /** Present when one WiseGolf product contains multiple course resources. */
+  /** Legacy resource location used by some WiseGolf products. */
   resourceId?: number | null;
+  /**
+   * Resource allocation for this capacity row. Multi-resource products put
+   * the course ID here rather than on `row.resourceId`.
+   */
+  resources?: {
+    resourceId?: number | string | null;
+    quantity?: number | string | null;
+  }[] | null;
 }
 
 export interface ReservationsResponse {
