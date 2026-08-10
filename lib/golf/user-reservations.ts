@@ -12,8 +12,6 @@ export interface OmatVarauksetResult {
 /** Raw WiseGolf reservation row from getusergolfreservations. */
 interface RawUserReservationRow {
   id?: number | string;
-  start: string; // "YYYY-MM-DD HH:MM:SS"
-  end: string;
   [key: string]: unknown;
 }
 
@@ -23,8 +21,15 @@ interface RawUserReservationsResponse {
 }
 
 /** Convert "YYYY-MM-DD HH:MM:SS" → ISO "YYYY-MM-DDTHH:MM:SS". */
-function toIso(wisegolfDatetime: string): string {
-  return wisegolfDatetime.replace(" ", "T");
+function toIso(v: unknown): string {
+  if (typeof v === "string") return v.replace(" ", "T");
+  return "";
+}
+
+/** Pick the first truthy value from a row for a set of candidate field names. */
+function pick(row: RawUserReservationRow, ...keys: string[]): unknown {
+  for (const k of keys) if (row[k]) return row[k];
+  return undefined;
 }
 
 /**
@@ -69,17 +74,33 @@ export async function fetchOmatVaraukset(): Promise<OmatVarauksetResult> {
     return { status: "virhe", events: [] };
   }
 
-  const events: CalendarEvent[] = data.rows.map((row, index) => ({
-    id: `golf-hgk-${row.id ?? index}`,
-    title: "Golf: Helsingin Golfklubi",
-    start: toIso(row.start),
-    end: toIso(row.end),
-    allDay: false,
-    source: "golf",
-    location: null,
-    notes: null,
-    tripId: null,
-  }));
+  // Log the first row's keys to help diagnose field names (visible in Vercel function logs).
+  if (data.rows.length > 0) {
+    console.log("[golf/omat-varaukset] first row keys:", Object.keys(data.rows[0]!));
+    console.log("[golf/omat-varaukset] first row:", JSON.stringify(data.rows[0]));
+  }
+
+  const events: CalendarEvent[] = data.rows
+    .map((row, index): CalendarEvent | null => {
+      const startRaw = pick(row, "start", "startTime", "startDate", "dateStart", "reservationStart");
+      const endRaw = pick(row, "end", "endTime", "endDate", "dateEnd", "reservationEnd");
+      const startIso = toIso(startRaw);
+      const endIso = toIso(endRaw);
+      // Skip rows where we can't determine the datetime.
+      if (!startIso || !endIso) return null;
+      return {
+        id: `golf-hgk-${String(row.id ?? index)}`,
+        title: "Golf: Helsingin Golfklubi",
+        start: startIso,
+        end: endIso,
+        allDay: false,
+        source: "golf",
+        location: null,
+        notes: null,
+        tripId: null,
+      };
+    })
+    .filter((e): e is NonNullable<typeof e> => e !== null);
 
   return { status: "ok", events };
 }
