@@ -70,13 +70,13 @@ export async function fetchOmatVaraukset(): Promise<OmatVarauksetResult> {
     return { status: "virhe", events: [] };
   }
 
-  // Deduplicate by reservationTimeId — the same tee time produces one row per
-  // player in the group; we only want one calendar event per slot.
-  const seen = new Set<number>();
+  // Deduplicate by dateTimeStart — the same tee time produces one row per
+  // player in the group (reservationTimeId is per-player, not per-slot).
+  const seen = new Set<string>();
   const events: CalendarEvent[] = [];
   for (const row of data.rows) {
-    if (seen.has(row.reservationTimeId)) continue;
-    seen.add(row.reservationTimeId);
+    if (seen.has(row.dateTimeStart)) continue;
+    seen.add(row.dateTimeStart);
     events.push({
       id: `golf-hgk-${row.reservationTimeId}`,
       title: `Golf · HGK`,
