@@ -32,6 +32,7 @@ export interface ResourceRule {
     /** kuumatAjat: this tee time opens this many minutes before its start. */
     minutes?: number;
     inheritToOthers?: boolean;
+    message?: string;
   };
 }
 
@@ -58,8 +59,9 @@ export interface FreeSlot {
   bookingRestriction?: {
     type: "opens_before_start";
     minutesBefore: number;
-    /** ISO UTC instant, calculated from the tee time in Europe/Helsinki. */
+    /** ISO instant with the Europe/Helsinki offset, calculated from the tee time. */
     opensAt: string;
+    message?: string;
   };
 }
 

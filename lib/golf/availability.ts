@@ -54,6 +54,25 @@ function helsinkiTeeTime(date: string, slotMinutes: number): Date {
   return new Date(utcGuess - helsinkiOffsetMinutes(utcGuess) * 60_000);
 }
 
+/** An ISO timestamp that retains the user-facing Europe/Helsinki offset. */
+function toHelsinkiIso(instant: Date): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Helsinki",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+    timeZoneName: "longOffset",
+  }).formatToParts(instant);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "00";
+  const offset = value("timeZoneName").replace("GMT", "") || "+00:00";
+  return `${value("year")}-${value("month")}-${value("day")}T${value("hour")}:${value("minute")}:${value("second")}${offset}`;
+}
+
 function openingRestriction(
   rules: ResourceRule[],
   date: string,
@@ -76,7 +95,8 @@ function openingRestriction(
   return {
     type: "opens_before_start",
     minutesBefore: rule.ruleValue.minutes,
-    opensAt: opensAt.toISOString(),
+    opensAt: toHelsinkiIso(opensAt),
+    ...(typeof rule.ruleValue.message === "string" ? { message: rule.ruleValue.message } : {}),
   };
 }
 
