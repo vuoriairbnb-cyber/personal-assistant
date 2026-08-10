@@ -4,6 +4,18 @@ import { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import type { ClubDayResult } from "@/lib/golf/types";
 
+function formatHelsinkiTime(iso: string) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Helsinki",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(iso));
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "00";
+  return `${value("hour")}:${value("minute")}`;
+}
+
 function statusMessage(result: ClubDayResult): string {
   switch (result.status) {
     case "kausi_kiinni":
@@ -56,8 +68,15 @@ export function ClubResultSection({ result }: { result: ClubDayResult }) {
                   className="flex items-center justify-between px-4 py-2 text-sm"
                 >
                   <span className="font-medium text-text-primary">{slot.aika}</span>
-                  <span className="text-text-tertiary">
-                    {slot.vapaita} {slot.vapaita === 1 ? "paikka" : "paikkaa"}
+                  <span className="flex items-center gap-2">
+                    <span className="text-text-tertiary">
+                      {slot.availablePlayers} {slot.availablePlayers === 1 ? "paikka" : "paikkaa"}
+                    </span>
+                    {!slot.bookableNow && slot.bookingRestriction && (
+                      <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-[11px] font-medium text-accent">
+                        Avautuu klo {formatHelsinkiTime(slot.bookingRestriction.opensAt)}
+                      </span>
+                    )}
                   </span>
                 </li>
               ))}

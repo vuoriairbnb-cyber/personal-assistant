@@ -32,6 +32,54 @@ function isClosed(rules: ResourceRule[], date: string, weekday: number, slotMinu
     .some((rule) => slotMinutes >= toMinutes(rule.startTime) && slotMinutes < toMinutes(rule.endTime));
 }
 
+function helsinkiOffsetMinutes(utcMilliseconds: number): number {
+  const timeZoneName = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Helsinki",
+    timeZoneName: "longOffset",
+  })
+    .formatToParts(new Date(utcMilliseconds))
+    .find((part) => part.type === "timeZoneName")?.value;
+  const match = timeZoneName?.match(/^GMT([+-])(\d{2}):(\d{2})$/);
+  if (!match) return 0;
+  const minutes = Number(match[2]) * 60 + Number(match[3]);
+  return match[1] === "+" ? minutes : -minutes;
+}
+
+/** Converts a local Europe/Helsinki tee-time date and minute count to UTC. */
+function helsinkiTeeTime(date: string, slotMinutes: number): Date {
+  const [year, month, day] = date.split("-").map(Number);
+  const hour = Math.floor(slotMinutes / 60);
+  const minute = slotMinutes % 60;
+  const utcGuess = Date.UTC(year!, month! - 1, day!, hour, minute);
+  return new Date(utcGuess - helsinkiOffsetMinutes(utcGuess) * 60_000);
+}
+
+function openingRestriction(
+  rules: ResourceRule[],
+  date: string,
+  weekday: number,
+  slotMinutes: number
+): FreeSlot["bookingRestriction"] {
+  const rule = rules.find(
+    (candidate) =>
+      candidate.ruleName === "kuumatAjat" &&
+      isRuleActiveOn(candidate, date, weekday) &&
+      slotMinutes >= toMinutes(candidate.startTime) &&
+      slotMinutes < toMinutes(candidate.endTime) &&
+      typeof candidate.ruleValue?.minutes === "number" &&
+      Number.isFinite(candidate.ruleValue.minutes) &&
+      candidate.ruleValue.minutes >= 0
+  );
+  if (!rule || rule.ruleValue?.minutes === undefined) return undefined;
+
+  const opensAt = new Date(helsinkiTeeTime(date, slotMinutes).getTime() - rule.ruleValue.minutes * 60_000);
+  return {
+    type: "opens_before_start",
+    minutesBefore: rule.ruleValue.minutes,
+    opensAt: opensAt.toISOString(),
+  };
+}
+
 /**
  * Free tee times for one day. Every parameter (opening hours, slot length,
  * capacity, closures) is read from `settings` — never hardcoded, since the
@@ -41,7 +89,8 @@ function isClosed(rules: ResourceRule[], date: string, weekday: number, slotMinu
 export function computeFreeSlots(
   date: string,
   settings: CalendarSettingsResponse,
-  rows: ReservationRow[]
+  rows: ReservationRow[],
+  now: Date = new Date()
 ): FreeSlot[] {
   const { startTime, endTime, duration, breakTime, resources } = settings.reservationSettings;
   const quantity = resources[0]?.quantity ?? 0;
@@ -64,8 +113,17 @@ export function computeFreeSlots(
   for (let t = start; t < end; t += step) {
     if (isClosed(settings.resourceRules, date, weekday, t)) continue;
     const aika = minutesToHHMM(t);
-    const vapaita = quantity - (bookedCounts.get(aika) ?? 0);
-    if (vapaita > 0) slots.push({ aika, vapaita });
+    const availablePlayers = quantity - (bookedCounts.get(aika) ?? 0);
+    if (availablePlayers > 0) {
+      const bookingRestriction = openingRestriction(settings.resourceRules, date, weekday, t);
+      slots.push({
+        aika,
+        vapaita: availablePlayers,
+        availablePlayers,
+        bookableNow: !bookingRestriction || now >= new Date(bookingRestriction.opensAt),
+        ...(bookingRestriction ? { bookingRestriction } : {}),
+      });
+    }
   }
 
   return slots;

@@ -27,7 +27,12 @@ export interface ResourceRule {
   endTime: string;
   /** 7 booleans, index 0 = Monday. null means "every day" within the date range. */
   recurrenceDays: boolean[] | null;
-  ruleValue?: { comment?: string };
+  ruleValue?: {
+    comment?: string;
+    /** kuumatAjat: this tee time opens this many minutes before its start. */
+    minutes?: number;
+    inheritToOthers?: boolean;
+  };
 }
 
 export interface CalendarSettingsResponse {
@@ -45,7 +50,17 @@ export interface CalendarSettingsResponse {
 /** Clean, privacy-safe output shape — the only thing the client ever sees. */
 export interface FreeSlot {
   aika: string; // "HH:MM"
+  /** Legacy Finnish name retained for existing consumers. */
   vapaita: number;
+  /** Explicit availability independent from whether the time is bookable yet. */
+  availablePlayers: number;
+  bookableNow: boolean;
+  bookingRestriction?: {
+    type: "opens_before_start";
+    minutesBefore: number;
+    /** ISO UTC instant, calculated from the tee time in Europe/Helsinki. */
+    opensAt: string;
+  };
 }
 
 export type ClubDayStatus =
