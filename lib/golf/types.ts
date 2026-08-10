@@ -8,6 +8,8 @@ export interface ReservationRow {
   end: string;
   status: number;
   quantity: number;
+  /** Present when one WiseGolf product contains multiple course resources. */
+  resourceId?: number | null;
 }
 
 export interface ReservationsResponse {
@@ -20,6 +22,7 @@ export interface ReservationsResponse {
 }
 
 export interface ResourceRule {
+  resourceId?: number | null;
   ruleName: string;
   startDate: string | null;
   endDate: string | null;
@@ -43,7 +46,8 @@ export interface CalendarSettingsResponse {
     endTime: string; // "21:00:00"
     duration: number; // minutes
     breakTime: number; // minutes
-    resources: { quantity: number }[];
+    limitFutureReservations?: number | null;
+    resources: { id?: number; resourceId?: number; quantity: number }[];
   };
   resourceRules: ResourceRule[];
 }

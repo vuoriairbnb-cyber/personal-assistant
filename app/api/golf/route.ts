@@ -11,13 +11,21 @@ import {
 } from "@/lib/golf/clubs";
 import { fetchCalendarSettings, fetchReservations } from "@/lib/golf/client";
 import { computeFreeSlots } from "@/lib/golf/availability";
-import type { ClubDayResult, DayGroup, FreeSlot } from "@/lib/golf/types";
+import type {
+  CalendarSettingsResponse,
+  ClubDayResult,
+  DayGroup,
+  FreeSlot,
+  ReservationsResponse,
+} from "@/lib/golf/types";
 
 const CACHE_TTL_MS = 15 * 60 * 1000;
 
 // Raw slots are cached per course. A multi-course club must never share a
 // cached response between product IDs.
-const cache = new Map<string, { vapaat: FreeSlot[]; expiresAt: number }>();
+type ProductData = { reservations: ReservationsResponse; settings: CalendarSettingsResponse };
+const productCache = new Map<string, { data: ProductData; expiresAt: number }>();
+const productRequests = new Map<string, Promise<ProductData>>();
 
 function helsinkiNow() {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -51,18 +59,33 @@ function resultBase(club: GolfClub, course: GolfCourse) {
   };
 }
 
-async function getRawVapaat(club: GolfClub, course: GolfCourse, date: string): Promise<FreeSlot[]> {
-  const cacheKey = `${club.id}:${course.id}:${date}`;
-  const cached = cache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.vapaat;
+async function getProductData(club: GolfClub, productid: number, date: string): Promise<ProductData> {
+  const cacheKey = `${club.id}:${productid}:${date}`;
+  const cached = productCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
 
-  const [reservations, settings] = await Promise.all([
-    fetchReservations(club, course, date),
-    fetchCalendarSettings(club, course, date),
-  ]);
-  const vapaat = computeFreeSlots(date, settings, reservations.rows);
-  cache.set(cacheKey, { vapaat, expiresAt: Date.now() + CACHE_TTL_MS });
-  return vapaat;
+  const inFlight = productRequests.get(cacheKey);
+  if (inFlight) return inFlight;
+
+  const request = Promise.all([
+    fetchReservations(club, productid, date),
+    fetchCalendarSettings(club, productid, date),
+  ])
+    .then(([reservations, settings]) => {
+      const data = { reservations, settings };
+      productCache.set(cacheKey, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+      return data;
+    })
+    .finally(() => productRequests.delete(cacheKey));
+  productRequests.set(cacheKey, request);
+  return request;
+}
+
+async function getRawVapaat(club: GolfClub, course: GolfCourse, date: string): Promise<FreeSlot[]> {
+  const { reservations, settings } = await getProductData(club, course.productid, date);
+  // Product responses are cached above. Recompute the course view every
+  // request so time-sensitive bookableNow transitions are never stale.
+  return computeFreeSlots(date, settings, reservations.rows, new Date(), course.resourceId);
 }
 
 function filterSlots(vapaat: FreeSlot[], min: number | null, after: string | null, before: string | null) {

@@ -26,9 +26,24 @@ function isRuleActiveOn(rule: ResourceRule, date: string, weekday: number): bool
 }
 
 /** Is `slotMinutes` inside an active aikaSulku (time-closure) rule for this date? */
-function isClosed(rules: ResourceRule[], date: string, weekday: number, slotMinutes: number): boolean {
+function ruleMatchesResource(rule: ResourceRule, resourceId?: number): boolean {
+  return resourceId === undefined || rule.resourceId === null || rule.resourceId === undefined || rule.resourceId === resourceId;
+}
+
+function isClosed(
+  rules: ResourceRule[],
+  date: string,
+  weekday: number,
+  slotMinutes: number,
+  resourceId?: number
+): boolean {
   return rules
-    .filter((rule) => rule.ruleName === "aikaSulku" && isRuleActiveOn(rule, date, weekday))
+    .filter(
+      (rule) =>
+        rule.ruleName === "aikaSulku" &&
+        ruleMatchesResource(rule, resourceId) &&
+        isRuleActiveOn(rule, date, weekday)
+    )
     .some((rule) => slotMinutes >= toMinutes(rule.startTime) && slotMinutes < toMinutes(rule.endTime));
 }
 
@@ -77,11 +92,13 @@ function openingRestriction(
   rules: ResourceRule[],
   date: string,
   weekday: number,
-  slotMinutes: number
+  slotMinutes: number,
+  resourceId?: number
 ): FreeSlot["bookingRestriction"] {
   const rule = rules.find(
     (candidate) =>
       candidate.ruleName === "kuumatAjat" &&
+      ruleMatchesResource(candidate, resourceId) &&
       isRuleActiveOn(candidate, date, weekday) &&
       slotMinutes >= toMinutes(candidate.startTime) &&
       slotMinutes < toMinutes(candidate.endTime) &&
@@ -110,10 +127,14 @@ export function computeFreeSlots(
   date: string,
   settings: CalendarSettingsResponse,
   rows: ReservationRow[],
-  now: Date = new Date()
+  now: Date = new Date(),
+  resourceId?: number
 ): FreeSlot[] {
   const { startTime, endTime, duration, breakTime, resources } = settings.reservationSettings;
-  const quantity = resources[0]?.quantity ?? 0;
+  const resource = resourceId === undefined
+    ? resources[0]
+    : resources.find((item) => item.id === resourceId || item.resourceId === resourceId);
+  const quantity = resource?.quantity ?? 0;
   const step = duration + breakTime;
   if (step <= 0 || quantity <= 0) return [];
 
@@ -121,6 +142,7 @@ export function computeFreeSlots(
 
   const bookedCounts = new Map<string, number>();
   for (const row of rows) {
+    if (resourceId !== undefined && row.resourceId !== resourceId) continue;
     const [rowDate, rowTime] = row.start.split(" ");
     if (rowDate !== date || !rowTime) continue;
     const key = rowTime.slice(0, 5); // "HH:MM"
@@ -131,11 +153,11 @@ export function computeFreeSlots(
   const start = toMinutes(startTime);
   const end = toMinutes(endTime);
   for (let t = start; t < end; t += step) {
-    if (isClosed(settings.resourceRules, date, weekday, t)) continue;
+    if (isClosed(settings.resourceRules, date, weekday, t, resourceId)) continue;
     const aika = minutesToHHMM(t);
     const availablePlayers = quantity - (bookedCounts.get(aika) ?? 0);
     if (availablePlayers > 0) {
-      const bookingRestriction = openingRestriction(settings.resourceRules, date, weekday, t);
+      const bookingRestriction = openingRestriction(settings.resourceRules, date, weekday, t, resourceId);
       slots.push({
         aika,
         vapaita: availablePlayers,

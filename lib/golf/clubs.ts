@@ -10,13 +10,22 @@ export interface SeasonWindow {
   loppuu?: string | null;
 }
 
+/** A non-recurring, API-confirmed season window with full calendar dates. */
+export interface ExactSeasonWindow {
+  alkaa: string;
+  loppuu: string;
+}
+
 export interface GolfCourse {
   id: string;
   nimi: string;
   productid: number;
+  /** Optional WiseGolf resource inside a shared product. */
+  resourceId?: number;
   /** Lowercase phrases that select this course in a free-text search. */
   aliases?: string[];
   kausi?: SeasonWindow;
+  tarkkaKausi?: ExactSeasonWindow;
   /** Days ahead the booking calendar reaches. */
   horisonttiPaivia?: number | null;
   /** Helsinki time at which the furthest booking day becomes visible. */
@@ -195,6 +204,43 @@ export const KLUBIT: GolfClub[] = [
       },
     ],
   },
+  {
+    id: "nordcenter",
+    nimi: "Nordcenter",
+    domain: "api.nordcenter.fi",
+    aliases: ["nordcenter"],
+    bookingUrl: "https://nordcenter.fi",
+    kentat: [
+      {
+        id: "benz",
+        nimi: "Benz",
+        productid: 462,
+        resourceId: 49,
+        aliases: ["nordcenter benz", "benz"],
+        tarkkaKausi: { alkaa: "2026-03-27", loppuu: "2026-11-13" },
+        // calendarsettings.limitFutureReservations currently returns 2;
+        // no unverified opening time is configured.
+        horisonttiPaivia: 2,
+        paikkoja: 4,
+        lahtovaliMin: 10,
+        paivanAlku: "07:00",
+        paivanLoppu: "21:00",
+      },
+      {
+        id: "fream",
+        nimi: "Fream",
+        productid: 462,
+        resourceId: 51,
+        aliases: ["nordcenter fream", "fream"],
+        tarkkaKausi: { alkaa: "2026-03-27", loppuu: "2026-11-13" },
+        horisonttiPaivia: 2,
+        paikkoja: 4,
+        lahtovaliMin: 10,
+        paivanAlku: "07:00",
+        paivanLoppu: "21:00",
+      },
+    ],
+  },
 ];
 
 export const DEFAULT_CLUB_ID = KLUBIT[0]!.id;
@@ -243,6 +289,9 @@ export function detectCourse(text: string, withinClub?: GolfClub | null) {
 }
 
 export function isInSeason(course: GolfCourse, date: string): boolean {
+  if (course.tarkkaKausi) {
+    return date >= course.tarkkaKausi.alkaa && date <= course.tarkkaKausi.loppuu;
+  }
   if (!course.kausi) return true;
   const mmdd = date.slice(5);
   const { alkaa, loppuu } = course.kausi;
