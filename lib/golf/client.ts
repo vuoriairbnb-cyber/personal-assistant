@@ -1,5 +1,5 @@
 import "server-only";
-import type { GolfClubConfig } from "@/lib/golf/clubs";
+import type { GolfClub, GolfCourse } from "@/lib/golf/clubs";
 import type { CalendarSettingsResponse, ReservationsResponse } from "@/lib/golf/types";
 
 // No WiseGolf club has a public API — every club's endpoints were found in
@@ -16,24 +16,26 @@ async function getJson<T>(url: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-function baseUrl(club: GolfClubConfig): string {
+function baseUrl(club: GolfClub): string {
   return `https://${club.domain}/api/1.0`;
 }
 
 /** Booked seats for one day. Never read `.reservationsGolfPlayers` from this. */
 export async function fetchReservations(
-  club: GolfClubConfig,
+  club: GolfClub,
+  course: GolfCourse,
   date: string
 ): Promise<ReservationsResponse> {
-  const url = `${baseUrl(club)}/reservations/?productid=${club.productid}&date=${date}&golf=1`;
+  const url = `${baseUrl(club)}/reservations/?productid=${course.productid}&date=${date}&golf=1`;
   return getJson<ReservationsResponse>(url);
 }
 
 /** Opening hours, slot length, capacity, and closure rules for one day. */
 export async function fetchCalendarSettings(
-  club: GolfClubConfig,
+  club: GolfClub,
+  course: GolfCourse,
   date: string
 ): Promise<CalendarSettingsResponse> {
-  const url = `${baseUrl(club)}/reservations/calendarsettings/?productid=${club.productid}&date=${date}`;
+  const url = `${baseUrl(club)}/reservations/calendarsettings/?productid=${course.productid}&date=${date}`;
   return getJson<CalendarSettingsResponse>(url);
 }

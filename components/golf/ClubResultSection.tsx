@@ -30,7 +30,12 @@ export function ClubResultSection({ result }: { result: ClubDayResult }) {
         aria-expanded={open}
         className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left"
       >
-        <span className="text-sm font-semibold text-text-primary">{result.nimi}</span>
+        <div>
+          <span className="text-sm font-semibold text-text-primary">{result.clubName}</span>
+          {result.courseId !== "main" && (
+            <p className="text-xs text-text-secondary">{result.courseName}</p>
+          )}
+        </div>
         <span className="flex shrink-0 items-center gap-1.5 text-xs text-text-tertiary">
           {statusMessage(result)}
           {open ? <ChevronUp size={14} strokeWidth={1.75} /> : <ChevronDown size={14} strokeWidth={1.75} />}

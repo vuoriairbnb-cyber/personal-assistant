@@ -10,7 +10,7 @@ import { ClubMultiSelect } from "@/components/golf/ClubMultiSelect";
 import { DateFormSearch } from "@/components/golf/DateFormSearch";
 import { DayGroupResults } from "@/components/golf/DayGroupResults";
 import { parseGolfQuery, toSearchParams } from "@/lib/golf/parse-query";
-import { KLUBIT, DEFAULT_CLUB_ID, detectClub, getClub } from "@/lib/golf/clubs";
+import { KLUBIT, DEFAULT_CLUB_ID, detectClub, detectCourse, getClub } from "@/lib/golf/clubs";
 import type { DayGroup } from "@/lib/golf/types";
 
 const QUICK_QUERIES = [
@@ -46,14 +46,22 @@ export function GolfSearch() {
 
     // A club named in the text wins for this search and replaces the chip
     // selection too, so a follow-up quick-query button uses it.
-    const detected = detectClub(query);
-    const searchClubs = detected ? new Set([detected.id]) : selectedClubs;
-    if (detected) setSelectedClubs(searchClubs);
+    const detectedClub = detectClub(query);
+    // A globally unambiguous course alias (e.g. "Forest") is enough to
+    // select its parent club; within an explicitly named club we only inspect
+    // that club's own courses.
+    const detectedCourse = detectCourse(query, detectedClub);
+    const courseClub = detectedCourse?.club;
+    const searchClubs = detectedClub || courseClub ? new Set([(detectedClub ?? courseClub)!.id]) : selectedClubs;
+    if (detectedClub || courseClub) setSelectedClubs(searchClubs);
 
     try {
       const parsed = parseGolfQuery(query);
       const params = toSearchParams(parsed);
       params.set("club", Array.from(searchClubs).join(","));
+      if (detectedCourse) {
+        params.set("course", `${detectedCourse.club.id}:${detectedCourse.course.id}`);
+      }
       const response = await fetch(`/api/golf?${params.toString()}`);
       const body = (await response.json()) as { results: DayGroup[] } | ErrorBody;
 

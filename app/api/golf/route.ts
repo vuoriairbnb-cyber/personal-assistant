@@ -2,10 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireApprovedUser } from "@/lib/auth/guard";
 import {
   DEFAULT_CLUB_ID,
-  effectiveHorizon,
   getClub,
+  getCourse,
   isInSeason,
-  type GolfClubConfig,
+  visibleHorizon,
+  type GolfClub,
+  type GolfCourse,
 } from "@/lib/golf/clubs";
 import { fetchCalendarSettings, fetchReservations } from "@/lib/golf/client";
 import { computeFreeSlots } from "@/lib/golf/availability";
@@ -13,12 +15,23 @@ import type { ClubDayResult, DayGroup, FreeSlot } from "@/lib/golf/types";
 
 const CACHE_TTL_MS = 15 * 60 * 1000;
 
-// Raw (unfiltered) per-club-per-day slot list — shared across every min/
-// after/before variation of a request, keyed by club so clubs never collide.
+// Raw slots are cached per course. A multi-course club must never share a
+// cached response between product IDs.
 const cache = new Map<string, { vapaat: FreeSlot[]; expiresAt: number }>();
 
-function helsinkiToday(): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Helsinki" }).format(new Date());
+function helsinkiNow() {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Helsinki",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "00";
+  return { date: `${value("year")}-${value("month")}-${value("day")}`, time: `${value("hour")}:${value("minute")}` };
 }
 
 function addDays(date: string, days: number): string {
@@ -27,26 +40,32 @@ function addDays(date: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-async function getRawVapaat(club: GolfClubConfig, date: string): Promise<FreeSlot[]> {
-  const cacheKey = `${club.id}:${date}`;
+function resultBase(club: GolfClub, course: GolfCourse) {
+  return {
+    club: club.id,
+    nimi: club.nimi,
+    clubId: club.id,
+    clubName: club.nimi,
+    courseId: course.id,
+    courseName: course.nimi,
+  };
+}
+
+async function getRawVapaat(club: GolfClub, course: GolfCourse, date: string): Promise<FreeSlot[]> {
+  const cacheKey = `${club.id}:${course.id}:${date}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.vapaat;
 
   const [reservations, settings] = await Promise.all([
-    fetchReservations(club, date),
-    fetchCalendarSettings(club, date),
+    fetchReservations(club, course, date),
+    fetchCalendarSettings(club, course, date),
   ]);
   const vapaat = computeFreeSlots(date, settings, reservations.rows);
   cache.set(cacheKey, { vapaat, expiresAt: Date.now() + CACHE_TTL_MS });
   return vapaat;
 }
 
-function filterSlots(
-  vapaat: FreeSlot[],
-  min: number | null,
-  after: string | null,
-  before: string | null
-): FreeSlot[] {
+function filterSlots(vapaat: FreeSlot[], min: number | null, after: string | null, before: string | null) {
   return vapaat.filter((slot) => {
     if (min !== null && slot.vapaita < min) return false;
     if (after && slot.aika < after) return false;
@@ -61,51 +80,36 @@ function parseMin(raw: string | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/**
- * One club's result for one day. Season/horizon are checked *before* ever
- * calling the club's API — a closed-season or out-of-range request never
- * generates a request, per CLAUDE-golf.md's "don't call the API for dates
- * the calendar can't answer for" guidance. A real fetch failure is caught
- * here too, so one club's outage never takes down a multi-club search.
- */
-async function getClubDayResult(
-  club: GolfClubConfig,
+/** Each course has an independent failure boundary, including courses in the same club. */
+async function getCourseDayResult(
+  club: GolfClub,
+  course: GolfCourse,
   date: string,
   today: string,
+  helsinkiTime: string,
   min: number | null,
   after: string | null,
   before: string | null
 ): Promise<ClubDayResult> {
-  if (!isInSeason(club, date)) {
-    return { club: club.id, nimi: club.nimi, status: "kausi_kiinni", vapaat: [] };
-  }
+  const base = resultBase(club, course);
+  if (!isInSeason(course, date)) return { ...base, status: "kausi_kiinni", vapaat: [] };
 
-  const horisonttiPaivia = effectiveHorizon(club);
-  const maxDate = addDays(today, horisonttiPaivia);
-  if (date > maxDate) {
-    return {
-      club: club.id,
-      nimi: club.nimi,
-      status: "liian_kaukana",
-      vapaat: [],
-      horisonttiPaivia,
-    };
+  const horisonttiPaivia = visibleHorizon(course, helsinkiTime);
+  if (date > addDays(today, horisonttiPaivia)) {
+    return { ...base, status: "liian_kaukana", vapaat: [], horisonttiPaivia };
   }
 
   try {
-    const raw = await getRawVapaat(club, date);
-    return { club: club.id, nimi: club.nimi, status: "ok", vapaat: filterSlots(raw, min, after, before) };
+    const raw = await getRawVapaat(club, course, date);
+    return { ...base, status: "ok", vapaat: filterSlots(raw, min, after, before) };
   } catch {
-    return { club: club.id, nimi: club.nimi, status: "virhe", vapaat: [] };
+    return { ...base, status: "virhe", vapaat: [] };
   }
 }
 
-function parseClubs(raw: string): { clubs: GolfClubConfig[]; unknown: string[] } {
-  const ids = raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const clubs: GolfClubConfig[] = [];
+function parseClubs(raw: string): { clubs: GolfClub[]; unknown: string[] } {
+  const ids = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  const clubs: GolfClub[] = [];
   const unknown: string[] = [];
   for (const id of ids) {
     const club = getClub(id);
@@ -113,6 +117,25 @@ function parseClubs(raw: string): { clubs: GolfClubConfig[]; unknown: string[] }
     else unknown.push(id);
   }
   return { clubs, unknown };
+}
+
+/** course accepts clubId:courseId entries, e.g. pickala:forest. */
+function parseCourseFilter(raw: string | null, clubs: GolfClub[]) {
+  const selected = new Map<string, GolfCourse[]>();
+  if (!raw) return { selected, error: null as string | null };
+
+  for (const entry of raw.split(",").map((item) => item.trim()).filter(Boolean)) {
+    const [clubId, courseId, extra] = entry.split(":");
+    const club = clubId ? getClub(clubId) : undefined;
+    const course = club && courseId && !extra ? getCourse(club, courseId) : undefined;
+    if (!club || !course || !clubs.some((selectedClub) => selectedClub.id === club.id)) {
+      return { selected, error: `Tuntematon tai valitsemattomaan seuraan kuuluva kenttä: ${entry}` };
+    }
+    const courses = selected.get(club.id) ?? [];
+    if (!courses.some((item) => item.id === course.id)) courses.push(course);
+    selected.set(club.id, courses);
+  }
+  return { selected, error: null as string | null };
 }
 
 export async function GET(request: NextRequest) {
@@ -124,14 +147,12 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
-
   const { clubs, unknown } = parseClubs(searchParams.get("club") ?? DEFAULT_CLUB_ID);
-  if (unknown.length > 0) {
-    return NextResponse.json({ error: `Tuntematon klubi: ${unknown.join(", ")}` }, { status: 400 });
-  }
-  if (clubs.length === 0) {
-    return NextResponse.json({ error: "Anna vähintään yksi klubi." }, { status: 400 });
-  }
+  if (unknown.length > 0) return NextResponse.json({ error: `Tuntematon klubi: ${unknown.join(", ")}` }, { status: 400 });
+  if (clubs.length === 0) return NextResponse.json({ error: "Anna vähintään yksi klubi." }, { status: 400 });
+
+  const courseFilter = parseCourseFilter(searchParams.get("course"), clubs);
+  if (courseFilter.error) return NextResponse.json({ error: courseFilter.error }, { status: 400 });
 
   const date = searchParams.get("date");
   const from = searchParams.get("from");
@@ -139,27 +160,21 @@ export async function GET(request: NextRequest) {
   const min = parseMin(searchParams.get("min"));
   const after = searchParams.get("after");
   const before = searchParams.get("before");
+  if (!date && !from) return NextResponse.json({ error: "Anna date tai from(+to)." }, { status: 400 });
 
-  if (!date && !from) {
-    return NextResponse.json({ error: "Anna date tai from(+to)." }, { status: 400 });
-  }
-
-  const today = helsinkiToday();
-
-  // A date-range spans however far out the *widest* selected club reaches —
-  // a narrower club still shows "liian_kaukana" per day within that range,
-  // it just doesn't cut the range short for everyone else.
-  const widestHorizon = Math.max(...clubs.map(effectiveHorizon));
-  const maxRangeDate = addDays(today, widestHorizon);
+  const now = helsinkiNow();
+  const selectedCourses = clubs.flatMap((club) =>
+    (courseFilter.selected.get(club.id) ?? club.kentat).map((course) => ({ club, course }))
+  );
+  const widestHorizon = Math.max(...selectedCourses.map(({ course }) => visibleHorizon(course, now.time)));
+  const maxRangeDate = addDays(now.date, widestHorizon);
 
   let dates: string[];
   if (date) {
     dates = [date];
   } else {
     const rangeEnd = to && to < maxRangeDate ? to : maxRangeDate;
-    if (from! > rangeEnd) {
-      return NextResponse.json({ error: "from on haettavan aikavälin jälkeen." }, { status: 400 });
-    }
+    if (from! > rangeEnd) return NextResponse.json({ error: "from on haettavan aikavälin jälkeen." }, { status: 400 });
     dates = [];
     for (let d = from!; d <= rangeEnd; d = addDays(d, 1)) dates.push(d);
   }
@@ -168,7 +183,9 @@ export async function GET(request: NextRequest) {
     dates.map(async (d) => ({
       date: d,
       clubs: await Promise.all(
-        clubs.map((club) => getClubDayResult(club, d, today, min, after, before))
+        selectedCourses.map(({ club, course }) =>
+          getCourseDayResult(club, course, d, now.date, now.time, min, after, before)
+        )
       ),
     }))
   );

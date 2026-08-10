@@ -12,7 +12,7 @@ export function DayGroupResults({ group }: { group: DayGroup }) {
       <h3 className="text-sm font-semibold capitalize text-text-primary">{label}</h3>
       <div className="space-y-2">
         {group.clubs.map((club) => (
-          <ClubResultSection key={club.club} result={club} />
+          <ClubResultSection key={`${club.clubId}:${club.courseId}`} result={club} />
         ))}
       </div>
     </div>

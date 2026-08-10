@@ -59,8 +59,14 @@ export type ClubDayStatus =
   | "virhe";
 
 export interface ClubDayResult {
+  /** Legacy aliases retained for the existing result components. */
   club: string;
   nimi: string;
+  /** Explicit club/course fields make one course result independently identifiable. */
+  clubId: string;
+  clubName: string;
+  courseId: string;
+  courseName: string;
   status: ClubDayStatus;
   vapaat: FreeSlot[];
   /** Set only when status === "liian_kaukana": how far ahead this club's calendar goes. */
