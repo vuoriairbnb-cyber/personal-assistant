@@ -26,11 +26,13 @@ const TIME_INPUT_CLASSES =
 
 export function DateFormSearch({
   selectedClubs,
+  selectedCourses,
   onSearching,
   onResults,
   onError,
 }: {
   selectedClubs: Set<string>;
+  selectedCourses: Set<string>;
   onSearching: () => void;
   onResults: (results: DayGroup[]) => void;
   onError: (message: string) => void;
@@ -72,6 +74,10 @@ export function DateFormSearch({
       club: Array.from(selectedClubs).join(","),
       min: String(players),
     };
+    const courses = Array.from(selectedCourses).filter((entry) =>
+      selectedClubs.has(entry.split(":")[0] ?? "")
+    );
+    if (courses.length > 0) params.course = courses.join(",");
     if (timeMode === "after") params.after = afterTime;
     else if (timeMode === "before") params.before = beforeTime;
     else if (timeMode === "between") {

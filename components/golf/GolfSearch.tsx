@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/golf/SegmentedControl";
 import { ClubMultiSelect } from "@/components/golf/ClubMultiSelect";
+import { CourseMultiSelect } from "@/components/golf/CourseMultiSelect";
 import { DateFormSearch } from "@/components/golf/DateFormSearch";
 import { DayGroupResults } from "@/components/golf/DayGroupResults";
 import { parseGolfQuery, toSearchParams } from "@/lib/golf/parse-query";
@@ -35,6 +36,7 @@ interface ErrorBody {
 export function GolfSearch() {
   const [mode, setMode] = useState<Mode>("text");
   const [selectedClubs, setSelectedClubs] = useState<Set<string>>(new Set([DEFAULT_CLUB_ID]));
+  const [selectedCourses, setSelectedCourses] = useState<Set<string>>(new Set());
   const [text, setText] = useState("");
   const [results, setResults] = useState<DayGroup[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -53,7 +55,18 @@ export function GolfSearch() {
     const detectedCourse = detectCourse(query, detectedClub);
     const courseClub = detectedCourse?.club;
     const searchClubs = detectedClub || courseClub ? new Set([(detectedClub ?? courseClub)!.id]) : selectedClubs;
-    if (detectedClub || courseClub) setSelectedClubs(searchClubs);
+    if (detectedClub || courseClub) {
+      setSelectedClubs(searchClubs);
+      setSelectedCourses(() => {
+        if (detectedCourse) {
+          return new Set([`${detectedCourse.club.id}:${detectedCourse.course.id}`]);
+        }
+        const club = detectedClub ?? courseClub!;
+        return new Set(
+          club.kentat.length > 1 ? club.kentat.map((course) => `${club.id}:${course.id}`) : []
+        );
+      });
+    }
 
     try {
       const parsed = parseGolfQuery(query);
@@ -61,6 +74,11 @@ export function GolfSearch() {
       params.set("club", Array.from(searchClubs).join(","));
       if (detectedCourse) {
         params.set("course", `${detectedCourse.club.id}:${detectedCourse.course.id}`);
+      } else {
+        const courses = Array.from(selectedCourses).filter((entry) =>
+          searchClubs.has(entry.split(":")[0] ?? "")
+        );
+        if (courses.length > 0) params.set("course", courses.join(","));
       }
       const response = await fetch(`/api/golf?${params.toString()}`);
       const body = (await response.json()) as { results: DayGroup[] } | ErrorBody;
@@ -101,6 +119,23 @@ export function GolfSearch() {
     setLoading(false);
   }
 
+  function handleClubsChange(next: Set<string>) {
+    setSelectedClubs(next);
+    setSelectedCourses((current) => {
+      const courses = new Set(
+        Array.from(current).filter((entry) => next.has(entry.split(":")[0] ?? ""))
+      );
+      // Selecting a multi-course club starts with all of its courses, so the
+      // default remains the same as an unrestricted club search.
+      for (const club of KLUBIT) {
+        if (next.has(club.id) && !selectedClubs.has(club.id) && club.kentat.length > 1) {
+          club.kentat.forEach((course) => courses.add(`${club.id}:${course.id}`));
+        }
+      }
+      return courses;
+    });
+  }
+
   const totalFree =
     results?.reduce(
       (sum, group) =>
@@ -118,7 +153,12 @@ export function GolfSearch() {
 
   return (
     <div className="space-y-6">
-      <ClubMultiSelect selected={selectedClubs} onChange={setSelectedClubs} />
+      <ClubMultiSelect selected={selectedClubs} onChange={handleClubsChange} />
+      <CourseMultiSelect
+        selectedClubs={selectedClubs}
+        selectedCourses={selectedCourses}
+        onChange={setSelectedCourses}
+      />
 
       <SegmentedControl label="Hakutapa" value={mode} onChange={setMode} options={MODE_OPTIONS} />
 
@@ -154,6 +194,7 @@ export function GolfSearch() {
       ) : (
         <DateFormSearch
           selectedClubs={selectedClubs}
+          selectedCourses={selectedCourses}
           onSearching={() => {
             setLoading(true);
             setError(null);
