@@ -27,6 +27,10 @@ export interface WiseGolfRuleValueObject {
   minutes?: number;
   inheritToOthers?: boolean;
   message?: string;
+  /** Calendar visibility rules may use either of these fields. */
+  days?: number;
+  value?: number;
+  localTime?: string;
 }
 
 /** WiseGolf returns rule values either as an object or, for some rules, a number. */
@@ -93,6 +97,7 @@ export interface ClubDayResult {
   clubName: string;
   courseId: string;
   courseName: string;
+  courseCount: number;
   status: ClubDayStatus;
   vapaat: FreeSlot[];
   /** Set only when status === "liian_kaukana": how far ahead this club's calendar goes. */

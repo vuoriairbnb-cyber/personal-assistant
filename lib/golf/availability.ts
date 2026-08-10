@@ -48,6 +48,49 @@ function getRuleMessage(ruleValue: WiseGolfRuleValue | undefined): string | unde
     : undefined;
 }
 
+function getPositiveRuleNumber(ruleValue: WiseGolfRuleValue | undefined): number | null {
+  const value =
+    typeof ruleValue === "number"
+      ? ruleValue
+      : ruleValue?.days ?? ruleValue?.value ?? null;
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+export interface CalendarVisibility {
+  days: number;
+  opensAt?: string;
+}
+
+/**
+ * Reads WiseGolf's calendar visibility rules without assuming any club or
+ * product. A positive kalenteriNakyvyysPaivat value always wins; callers may
+ * safely use their configured fallback when the API has no such rule.
+ */
+export function getCalendarVisibility(
+  rules: ResourceRule[],
+  date: string,
+  resourceId?: number,
+  limitFutureReservations?: number | null
+): CalendarVisibility | null {
+  const weekday = isoWeekday(date);
+  const active = rules.filter(
+    (rule) => ruleMatchesResource(rule, resourceId) && isRuleActiveOn(rule, date, weekday)
+  );
+  const daysRule = active.find(
+    (rule) => rule.ruleName === "kalenteriNakyvyysPaivat" && getPositiveRuleNumber(rule.ruleValue) !== null
+  );
+  const days = daysRule ? getPositiveRuleNumber(daysRule.ruleValue) : null;
+  if (days === null) {
+    return typeof limitFutureReservations === "number" && limitFutureReservations > 0
+      ? { days: limitFutureReservations }
+      : null;
+  }
+
+  const opensAt = active.find((rule) => rule.ruleName === "kalenteriNakyvyysAvaus")?.ruleValue;
+  const localTime = typeof opensAt === "object" ? opensAt?.localTime : undefined;
+  return { days, ...(typeof localTime === "string" ? { opensAt: localTime.slice(0, 5) } : {}) };
+}
+
 function isClosed(
   rules: ResourceRule[],
   date: string,

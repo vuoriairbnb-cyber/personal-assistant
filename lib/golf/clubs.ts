@@ -13,7 +13,7 @@ export interface SeasonWindow {
 /** A non-recurring, API-confirmed season window with full calendar dates. */
 export interface ExactSeasonWindow {
   alkaa: string;
-  loppuu: string;
+  loppuu?: string | null;
 }
 
 export interface GolfCourse {
@@ -30,6 +30,8 @@ export interface GolfCourse {
   horisonttiPaivia?: number | null;
   /** Helsinki time at which the furthest booking day becomes visible. */
   horisonttiAukeaa?: string;
+  /** Read calendar visibility rules at runtime, falling back to the configured horizon. */
+  horisonttiCalendarista?: boolean;
   /** Informational course metadata; live calendar settings remain authoritative. */
   paikkoja?: number;
   lahtovaliMin?: number;
@@ -276,6 +278,34 @@ export const KLUBIT: GolfClub[] = [
       },
     ],
   },
+  {
+    id: "vuosaari",
+    nimi: "Vuosaari Golf",
+    domain: "api.vuosaarigolf.fi",
+    aliases: ["vuosaari golf", "vuosaarigolf", "vuosaari"],
+    bookingUrl: "https://vuosaarigolf.fi",
+    kentat: [
+      {
+        id: "vuosaari",
+        nimi: "Vuosaari Golf",
+        productid: 7,
+        resourceId: 1,
+        aliases: ["vuosaari golf", "vuosaarigolf", "vuosaari"],
+        // Current-year product startDate is safe as an exact availability
+        // boundary; endDate is null and intentionally remains open-ended.
+        tarkkaKausi: { alkaa: "2026-03-01", loppuu: null },
+        // API calendar visibility (7 days, opens 09:00) overrides this
+        // fallback when present; limitFutureReservations=0 must not win.
+        horisonttiPaivia: 7,
+        horisonttiAukeaa: "09:00",
+        horisonttiCalendarista: true,
+        paikkoja: 4,
+        lahtovaliMin: 10,
+        paivanAlku: "06:00",
+        paivanLoppu: "21:00",
+      },
+    ],
+  },
 ];
 
 export const DEFAULT_CLUB_ID = KLUBIT[0]!.id;
@@ -325,7 +355,8 @@ export function detectCourse(text: string, withinClub?: GolfClub | null) {
 
 export function isInSeason(course: GolfCourse, date: string): boolean {
   if (course.tarkkaKausi) {
-    return date >= course.tarkkaKausi.alkaa && date <= course.tarkkaKausi.loppuu;
+    return date >= course.tarkkaKausi.alkaa &&
+      (!course.tarkkaKausi.loppuu || date <= course.tarkkaKausi.loppuu);
   }
   if (!course.kausi) return true;
   const mmdd = date.slice(5);

@@ -10,7 +10,7 @@ import {
   type GolfCourse,
 } from "@/lib/golf/clubs";
 import { fetchCalendarSettings, fetchReservations } from "@/lib/golf/client";
-import { computeFreeSlots } from "@/lib/golf/availability";
+import { computeFreeSlots, getCalendarVisibility } from "@/lib/golf/availability";
 import type {
   CalendarSettingsResponse,
   ClubDayResult,
@@ -56,6 +56,7 @@ function resultBase(club: GolfClub, course: GolfCourse) {
     clubName: club.nimi,
     courseId: course.id,
     courseName: course.nimi,
+    courseCount: club.kentat.length,
   };
 }
 
@@ -81,8 +82,13 @@ async function getProductData(club: GolfClub, productid: number, date: string): 
   return request;
 }
 
-async function getRawVapaat(club: GolfClub, course: GolfCourse, date: string): Promise<FreeSlot[]> {
-  const { reservations, settings } = await getProductData(club, course.productid, date);
+async function getRawVapaat(
+  club: GolfClub,
+  course: GolfCourse,
+  date: string,
+  productData?: ProductData
+): Promise<FreeSlot[]> {
+  const { reservations, settings } = productData ?? await getProductData(club, course.productid, date);
   // Product responses are cached above. Recompute the course view every
   // request so time-sensitive bookableNow transitions are never stale.
   return computeFreeSlots(date, settings, reservations.rows, new Date(), course.resourceId);
@@ -117,13 +123,41 @@ async function getCourseDayResult(
   const base = resultBase(club, course);
   if (!isInSeason(course, date)) return { ...base, status: "kausi_kiinni", vapaat: [] };
 
-  const horisonttiPaivia = visibleHorizon(course, helsinkiTime);
-  if (date > addDays(today, horisonttiPaivia)) {
-    return { ...base, status: "liian_kaukana", vapaat: [], horisonttiPaivia };
+  // Existing courses keep their config-only horizon check. Courses that opt
+  // into calendar rules load the already-needed shared product response once
+  // and let kalenteriNakyvyysPaivat/localTime override that fallback.
+  if (!course.horisonttiCalendarista) {
+    const horisonttiPaivia = visibleHorizon(course, helsinkiTime);
+    if (date > addDays(today, horisonttiPaivia)) {
+      return { ...base, status: "liian_kaukana", vapaat: [], horisonttiPaivia };
+    }
   }
 
   try {
-    const raw = await getRawVapaat(club, course, date);
+    const productData = course.horisonttiCalendarista
+      ? await getProductData(club, course.productid, date)
+      : undefined;
+    const visibility = productData
+      ? getCalendarVisibility(
+          productData.settings.resourceRules,
+          date,
+          course.resourceId,
+          productData.settings.reservationSettings.limitFutureReservations
+        )
+      : null;
+    const horizonCourse = visibility
+      ? {
+          ...course,
+          horisonttiPaivia: visibility.days,
+          horisonttiAukeaa: visibility.opensAt ?? course.horisonttiAukeaa,
+        }
+      : course;
+    const horisonttiPaivia = visibleHorizon(horizonCourse, helsinkiTime);
+    if (date > addDays(today, horisonttiPaivia)) {
+      return { ...base, status: "liian_kaukana", vapaat: [], horisonttiPaivia };
+    }
+
+    const raw = await getRawVapaat(club, course, date, productData);
     return { ...base, status: "ok", vapaat: filterSlots(raw, min, after, before) };
   } catch {
     return { ...base, status: "virhe", vapaat: [] };

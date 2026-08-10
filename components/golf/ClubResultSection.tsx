@@ -44,7 +44,7 @@ export function ClubResultSection({ result }: { result: ClubDayResult }) {
       >
         <div>
           <span className="text-sm font-semibold text-text-primary">{result.clubName}</span>
-          {result.courseId !== "main" && (
+          {result.courseCount > 1 && (
             <p className="text-xs text-text-secondary">{result.courseName}</p>
           )}
         </div>
