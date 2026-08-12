@@ -1,7 +1,7 @@
 import "server-only";
-import { fetchReservations } from "./client.ts";
+import { fetchAuthenticatedReservations, WiseGolfAuthRequiredError } from "./client.ts";
 import { type GolfClub, type GolfCourse } from "./clubs.ts";
-import { matchesPublicGolfPlayer, parsePublicGolfPlayer } from "./player-parser.ts";
+import { matchesPublicGolfPlayer, parsePublicGolfPlayer, parseWiseGolfLocalDateTime } from "./player-parser.ts";
 import { validatePlayerSearchRequest } from "./player-search-request.ts";
 
 const CONCURRENCY = 5;
@@ -22,12 +22,15 @@ export async function searchPublicPlayers(input: ReturnType<typeof validatePlaye
   const work = input.clubs.flatMap((club) => input.dates.map((date) => ({ club, date })));
   const results: PlayerSearchResult[] = [];
   const partialFailures: { clubId: string; date: string }[] = [];
+  let authFailures = 0;
+  let successfulFetches = 0;
   let next = 0;
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, work.length) }, async () => {
     while (next < work.length) {
       const current = work[next++]!;
       try {
-        const responses = await Promise.all(current.club.kentat.map((course) => fetchReservations(current.club, course.productid, current.date)));
+        const responses = await Promise.all(current.club.kentat.map((course) => fetchAuthenticatedReservations(current.club, course.productid, current.date)));
+        successfulFetches += 1;
         for (const response of responses) {
           const rows = Array.isArray(response.reservationsGolfPlayers) ? response.reservationsGolfPlayers : [];
           for (const raw of rows) {
@@ -36,12 +39,18 @@ export async function searchPublicPlayers(input: ReturnType<typeof validatePlaye
             const course = courseForPlayer(current.club, player.resourceId);
             if (!course) continue;
             const dateTimeStart = player.dateTimeStart;
-            results.push({ clubId: current.club.id, clubName: current.club.nimi, courseId: course.id, courseName: course.nimi, date: dateTimeStart.slice(0, 10), time: dateTimeStart.slice(11, 16), dateTimeStart });
+            const localTime = parseWiseGolfLocalDateTime(dateTimeStart);
+            if (!localTime) continue;
+            results.push({ clubId: current.club.id, clubName: current.club.nimi, courseId: course.id, courseName: course.nimi, date: localTime.date, time: localTime.time, dateTimeStart });
           }
         }
-      } catch { partialFailures.push({ clubId: current.club.id, date: current.date }); }
+      } catch (error) {
+        if (error instanceof WiseGolfAuthRequiredError) authFailures += 1;
+        partialFailures.push({ clubId: current.club.id, date: current.date });
+      }
     }
   }));
+  if (authFailures > 0 && successfulFetches === 0) throw new WiseGolfAuthRequiredError("WiseGolf authentication is required");
   const unique = new Map<string, PlayerSearchResult>();
   results.forEach((result) => unique.set(`${result.clubId}:${result.courseId}:${result.dateTimeStart}`, result));
   return { results: [...unique.values()].sort((a, b) => a.dateTimeStart.localeCompare(b.dateTimeStart) || a.clubId.localeCompare(b.clubId)), partialFailures };

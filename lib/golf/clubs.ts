@@ -48,7 +48,7 @@ export interface GolfClub {
   kentat: GolfCourse[];
   omatVarauksetTuettu?: boolean;
   /** Enables live public-name reservation searches for this club. */
-  playerSearch?: { enabled: boolean };
+  playerSearch?: { enabled: boolean; auth: { type: "wisegolf-access-token"; envVar: string; sessionType: string } };
 }
 
 /** Compatibility name for consumers that previously imported GolfClubConfig. */
@@ -74,7 +74,7 @@ export const KLUBIT: GolfClub[] = [
       aliases: ["helsingin golfklubi", "hgk"],
       bookingUrl: "https://app.wisegolf.fi/#/golf/reservation/7",
       omatVarauksetTuettu: true,
-      playerSearch: { enabled: true },
+      playerSearch: { enabled: true, auth: { type: "wisegolf-access-token", envVar: "HGK_WISEGOLF_ACCESS_TOKEN", sessionType: "wisegolf" } },
     },
     { productid: 7, horisonttiPaivia: null }
   ),
@@ -85,7 +85,7 @@ export const KLUBIT: GolfClub[] = [
       domain: "api.kullogolf.fi",
       aliases: ["kullo golf", "kullo"],
       bookingUrl: "https://kullogolf.fi",
-      playerSearch: { enabled: true },
+      playerSearch: { enabled: true, auth: { type: "wisegolf-access-token", envVar: "KULLO_WISEGOLF_ACCESS_TOKEN", sessionType: "wisegolf" } },
     },
     { productid: 7, kausi: { alkaa: "04-09", loppuu: "10-19" }, horisonttiPaivia: 8 }
   ),
