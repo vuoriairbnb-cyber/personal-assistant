@@ -9,6 +9,9 @@ import type { CalendarSettingsResponse, ReservationsResponse } from "@/lib/golf/
 // come from the club's config (lib/golf/clubs.ts), never hardcoded here.
 
 const REQUEST_TIMEOUT_MS = 10_000;
+const RESERVATIONS_CACHE_TTL_MS = 15 * 60 * 1000;
+const reservationsCache = new Map<string, { data: ReservationsResponse; expiresAt: number }>();
+const reservationsRequests = new Map<string, Promise<ReservationsResponse>>();
 
 async function getJson<T>(url: string): Promise<T> {
   let lastError: unknown;
@@ -38,8 +41,20 @@ export async function fetchReservations(
   productid: number,
   date: string
 ): Promise<ReservationsResponse> {
+  const cacheKey = `${club.domain}:${productid}:${date}`;
+  const cached = reservationsCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+  const inFlight = reservationsRequests.get(cacheKey);
+  if (inFlight) return inFlight;
   const url = `${baseUrl(club)}/reservations/?productid=${productid}&date=${date}&golf=1`;
-  return getJson<ReservationsResponse>(url);
+  const request = getJson<ReservationsResponse>(url)
+    .then((data) => {
+      reservationsCache.set(cacheKey, { data, expiresAt: Date.now() + RESERVATIONS_CACHE_TTL_MS });
+      return data;
+    })
+    .finally(() => reservationsRequests.delete(cacheKey));
+  reservationsRequests.set(cacheKey, request);
+  return request;
 }
 
 /** Opening hours, slot length, capacity, and closure rules for one day. */

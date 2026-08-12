@@ -10,6 +10,7 @@ import { ClubMultiSelect } from "@/components/golf/ClubMultiSelect";
 import { CourseMultiSelect } from "@/components/golf/CourseMultiSelect";
 import { DateFormSearch } from "@/components/golf/DateFormSearch";
 import { DayGroupResults } from "@/components/golf/DayGroupResults";
+import { PlayerSearch } from "@/components/golf/PlayerSearch";
 import { parseGolfQuery, toSearchParams } from "@/lib/golf/parse-query";
 import { KLUBIT, DEFAULT_CLUB_ID, detectClub, detectCourse, getClub } from "@/lib/golf/clubs";
 import type { DayGroup } from "@/lib/golf/types";
@@ -23,6 +24,7 @@ const QUICK_QUERIES = [
 ];
 
 type Mode = "text" | "form";
+type GolfTab = "times" | "players";
 
 const MODE_OPTIONS: { value: Mode; label: string }[] = [
   { value: "text", label: "Kirjoita" },
@@ -34,6 +36,7 @@ interface ErrorBody {
 }
 
 export function GolfSearch() {
+  const [tab, setTab] = useState<GolfTab>("times");
   const [mode, setMode] = useState<Mode>("text");
   const [selectedClubs, setSelectedClubs] = useState<Set<string>>(new Set([DEFAULT_CLUB_ID]));
   const [selectedCourses, setSelectedCourses] = useState<Set<string>>(new Set());
@@ -153,6 +156,8 @@ export function GolfSearch() {
 
   return (
     <div className="space-y-6">
+      <SegmentedControl label="Golf-näkymä" value={tab} onChange={setTab} options={[{ value: "times", label: "Vapaat ajat" }, { value: "players", label: "Pelaajahaku" }]} />
+      {tab === "players" ? <PlayerSearch /> : <>
       <ClubMultiSelect selected={selectedClubs} onChange={handleClubsChange} />
       <CourseMultiSelect
         selectedClubs={selectedClubs}
@@ -244,6 +249,7 @@ export function GolfSearch() {
         <Lock size={12} strokeWidth={1.75} />
         Vain haku — varaus tehdään aina käsin yllä olevista linkeistä.
       </p>
+      </>}
     </div>
   );
 }

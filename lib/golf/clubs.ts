@@ -47,6 +47,8 @@ export interface GolfClub {
   bookingUrl: string;
   kentat: GolfCourse[];
   omatVarauksetTuettu?: boolean;
+  /** Enables live public-name reservation searches for this club. */
+  playerSearch?: { enabled: boolean };
 }
 
 /** Compatibility name for consumers that previously imported GolfClubConfig. */
@@ -72,6 +74,7 @@ export const KLUBIT: GolfClub[] = [
       aliases: ["helsingin golfklubi", "hgk"],
       bookingUrl: "https://app.wisegolf.fi/#/golf/reservation/7",
       omatVarauksetTuettu: true,
+      playerSearch: { enabled: true },
     },
     { productid: 7, horisonttiPaivia: null }
   ),
@@ -82,6 +85,7 @@ export const KLUBIT: GolfClub[] = [
       domain: "api.kullogolf.fi",
       aliases: ["kullo golf", "kullo"],
       bookingUrl: "https://kullogolf.fi",
+      playerSearch: { enabled: true },
     },
     { productid: 7, kausi: { alkaa: "04-09", loppuu: "10-19" }, horisonttiPaivia: 8 }
   ),

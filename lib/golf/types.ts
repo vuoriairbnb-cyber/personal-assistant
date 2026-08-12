@@ -23,6 +23,8 @@ export interface ReservationRow {
 export interface ReservationsResponse {
   success: boolean;
   rows: ReservationRow[];
+  /** Server-only raw public-player records. Never forward this payload to clients. */
+  reservationsGolfPlayers?: unknown;
   // reservationsGolfPlayers[] and reservationsAdditionalResources[] also
   // exist on the real response but are intentionally not typed here — they
   // must never be read past lib/golf/client.ts, let alone forwarded to the
