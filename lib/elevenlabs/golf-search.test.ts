@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveGolfCourses, validateGolfToolQuery } from "./golf-search.ts";
+import { resolveGolfCourses, summarizeCourseAvailability, validateGolfToolQuery } from "./golf-search.ts";
 
 const base = { date: "2026-08-14", players: 2 };
 
@@ -31,4 +31,21 @@ test("golf tool resolves supported and unsupported courses deterministically", (
   const all = resolveGolfCourses(validateGolfToolQuery({ ...base, search_all_supported: true }));
   assert.ok(all.targets.length > 10);
   assert.deepEqual(all.unsupportedCourses, []);
+});
+
+test("course summaries retain every matching course before results are capped", () => {
+  const day = (courseName: string, times: string[]) => ({ club: courseName, nimi: courseName, clubId: courseName, clubName: courseName, courseId: courseName, courseName, courseCount: 1, status: "ok" as const, vapaat: times.map((aika, index) => ({ aika, vapaita: index % 2 ? 4 : 2, availablePlayers: index % 2 ? 4 : 2, bookableNow: true })) });
+  const { allResults, courseSummaries } = summarizeCourseAvailability([
+    day("Alpha", Array.from({ length: 12 }, (_, index) => `0${Math.floor(index / 6) + 6}:${String((index % 6) * 9).padStart(2, "0")}`)),
+    day("Bravo", ["09:30", "09:39"]),
+    day("Charlie", ["09:48"]),
+  ]);
+  const results = allResults.sort((left, right) => left.time.localeCompare(right.time) || left.course.localeCompare(right.course)).slice(0, 12);
+  assert.equal(results.length, 12);
+  assert.deepEqual(new Set(results.map((result) => result.course)), new Set(["Alpha"]));
+  assert.deepEqual(courseSummaries, [
+    { course: "Alpha", matching_times: 12, first_time: "06:00", last_time: "07:45", max_available_spots: 4 },
+    { course: "Bravo", matching_times: 2, first_time: "09:30", last_time: "09:39", max_available_spots: 4 },
+    { course: "Charlie", matching_times: 1, first_time: "09:48", last_time: "09:48", max_available_spots: 2 },
+  ]);
 });

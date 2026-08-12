@@ -1,4 +1,5 @@
 import { KLUBIT, type GolfClub, type GolfCourse } from "../golf/clubs.ts";
+import type { ClubDayResult } from "../golf/types.ts";
 
 const MAX_COURSES = 10;
 const MAX_RESULTS = 12;
@@ -61,12 +62,36 @@ export function resolveGolfCourses(query: NormalizedGolfToolQuery) {
   return { targets, supportedCourses: targets.map(({ course }) => course.nimi), unsupportedCourses };
 }
 
+type GolfToolResult = { course: string; date: string; time: string; available_spots: number };
+export type GolfCourseSummary = { course: string; matching_times: number; first_time: string; last_time: string; max_available_spots: number };
+
+export function summarizeCourseAvailability(days: ClubDayResult[]): { allResults: GolfToolResult[]; courseSummaries: GolfCourseSummary[] } {
+  const allResults = days.flatMap((day) => day.status === "ok" ? day.vapaat.map((slot) => ({ course: day.courseName, date: "", time: slot.aika, available_spots: slot.availablePlayers })) : []);
+  const summaries = new Map<string, GolfCourseSummary>();
+  for (const result of allResults) {
+    const existing = summaries.get(result.course);
+    if (!existing) {
+      summaries.set(result.course, { course: result.course, matching_times: 1, first_time: result.time, last_time: result.time, max_available_spots: result.available_spots });
+      continue;
+    }
+    existing.matching_times += 1;
+    if (result.time < existing.first_time) existing.first_time = result.time;
+    if (result.time > existing.last_time) existing.last_time = result.time;
+    if (result.available_spots > existing.max_available_spots) existing.max_available_spots = result.available_spots;
+  }
+  return {
+    allResults,
+    courseSummaries: [...summaries.values()].sort((left, right) => left.course.localeCompare(right.course, "fi-FI")),
+  };
+}
+
 export async function runGolfToolSearch(query: NormalizedGolfToolQuery) {
   const resolved = resolveGolfCourses(query);
   const { searchCourseDay } = await import("../golf/search.ts");
   const days = await Promise.all(resolved.targets.map((target) => searchCourseDay(target, query.date, { min: query.players, after: query.timeFrom, before: query.timeTo })));
   if (resolved.targets.length > 0 && days.every((day) => day.status === "virhe")) throw new GolfToolError("Golf search failed", 502);
-  const results = days.flatMap((day) => day.status === "ok" ? day.vapaat.map((slot) => ({ course: day.courseName, date: query.date, time: slot.aika, available_spots: slot.availablePlayers })) : [])
+  const { allResults, courseSummaries } = summarizeCourseAvailability(days);
+  const results = allResults.map((result) => ({ ...result, date: query.date }))
     .sort((left, right) => left.time.localeCompare(right.time) || left.course.localeCompare(right.course)).slice(0, MAX_RESULTS);
-  return { ok: true as const, query: { courses: query.courses, search_all_supported: query.searchAllSupported, date: query.date, time_from: query.timeFrom, time_to: query.timeTo, players: query.players }, supported_courses: resolved.supportedCourses, unsupported_courses: resolved.unsupportedCourses, admin_attention: resolved.unsupportedCourses.length > 0, count: results.length, results };
+  return { ok: true as const, query: { courses: query.courses, search_all_supported: query.searchAllSupported, date: query.date, time_from: query.timeFrom, time_to: query.timeTo, players: query.players }, supported_courses: resolved.supportedCourses, unsupported_courses: resolved.unsupportedCourses, admin_attention: resolved.unsupportedCourses.length > 0, count: results.length, results, course_summaries: courseSummaries };
 }
