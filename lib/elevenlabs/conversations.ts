@@ -2,6 +2,8 @@ import "server-only";
 
 const ELEVENLABS_CONVERSATIONS_URL = "https://api.elevenlabs.io/v1/convai/conversations";
 const MAX_CONVERSATION_ID_LENGTH = 128;
+const CONVERSATION_LIST_PAGE_SIZE = 20;
+const DETAIL_ENRICHMENT_CONCURRENCY = 5;
 
 export interface ConversationListItem {
   id: string;
@@ -16,6 +18,7 @@ export interface ConversationListItem {
   title: string | null;
   userIdentifier: string | null;
   channel: "whatsapp" | null;
+  preview: string;
 }
 
 export interface ConversationTranscriptMessage {
@@ -26,6 +29,7 @@ export interface ConversationTranscriptMessage {
 
 export interface ConversationDetail {
   id: string;
+  userId: string | null;
   messages: ConversationTranscriptMessage[];
 }
 
@@ -83,12 +87,32 @@ function sourceIsWhatsApp(value: unknown): boolean {
   return typeof value === "string" && value.toLowerCase().includes("whatsapp");
 }
 
+function isInbound(direction: string | null): boolean {
+  return direction?.toLowerCase() === "inbound";
+}
+
+function displayUserIdentifier(
+  userId: string | null,
+  channel: ConversationListItem["channel"],
+  direction: string | null
+): string | null {
+  if (!userId) return null;
+  return channel === "whatsapp" && isInbound(direction) && /^\d+$/.test(userId)
+    ? `+${userId}`
+    : userId;
+}
+
 function mapListItem(value: unknown): ConversationListItem | null {
   const item = asRecord(value);
   const id = asString(item?.conversation_id);
   if (!item || !id) return null;
 
   const source = item.conversation_initiation_source;
+  const channel = sourceIsWhatsApp(source) ? "whatsapp" : null;
+  const direction = asString(item.direction);
+  const userIdentifier = asString(item.user_identifier) ?? asString(item.phone_number);
+  const summary = asString(item.transcript_summary);
+  const title = asString(item.call_summary_title);
   return {
     id,
     startedAtUnixSecs: asNumber(item.start_time_unix_secs),
@@ -97,13 +121,14 @@ function mapListItem(value: unknown): ConversationListItem | null {
     status: asString(item.status),
     successful: asBoolean(item.call_successful),
     agentName: asString(item.agent_name),
-    direction: asString(item.direction),
-    summary: asString(item.transcript_summary),
-    title: asString(item.call_summary_title),
+    direction,
+    summary,
+    title,
     // These are deliberately explicit fields only. Metadata is not forwarded
     // wholesale, avoiding an accidental PII proxy as the API evolves.
-    userIdentifier: asString(item.user_identifier) ?? asString(item.phone_number),
-    channel: sourceIsWhatsApp(source) ? "whatsapp" : null,
+    userIdentifier: displayUserIdentifier(userIdentifier, channel, direction),
+    channel,
+    preview: summary ?? title ?? "Ei viestin esikatselua",
   };
 }
 
@@ -113,10 +138,43 @@ export function isSafeConversationId(value: string): boolean {
 
 export async function listConversations(): Promise<ConversationListItem[]> {
   const { agentId } = getConfig();
-  const params = new URLSearchParams({ agent_id: agentId, page_size: "50" });
+  const params = new URLSearchParams({ agent_id: agentId, page_size: String(CONVERSATION_LIST_PAGE_SIZE) });
   const payload = asRecord(await elevenLabsFetch(`?${params.toString()}`));
   const conversations = Array.isArray(payload?.conversations) ? payload.conversations : [];
-  return conversations.map(mapListItem).filter((item): item is ConversationListItem => item !== null);
+  const items = conversations.map(mapListItem).filter((item): item is ConversationListItem => item !== null);
+
+  return mapWithConcurrency(items, DETAIL_ENRICHMENT_CONCURRENCY, async (item) => {
+    try {
+      const detail = await getConversation(item.id);
+      const firstUserMessage = detail.messages.find((message) => message.role === "user")?.message;
+      return {
+        ...item,
+        userIdentifier: displayUserIdentifier(detail.userId ?? item.userIdentifier, item.channel, item.direction),
+        preview: firstUserMessage ?? item.summary ?? item.title ?? "Ei viestin esikatselua",
+      };
+    } catch {
+      // One failed detail request must never make the inbox unavailable. The
+      // list response already contains a safe fallback preview and identity.
+      return item;
+    }
+  });
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const worker = async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      results[index] = await mapper(items[index]!);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  return results;
 }
 
 export async function getConversation(conversationId: string): Promise<ConversationDetail> {
@@ -141,7 +199,7 @@ export async function getConversation(conversationId: string): Promise<Conversat
     return [{ role, message, timeInCallSecs: asNumber(item?.time_in_call_secs) } as ConversationTranscriptMessage];
   });
 
-  return { id: conversationId, messages };
+  return { id: conversationId, userId: asString(payload?.user_id), messages };
 }
 
 export function toPublicError(error: unknown): { message: string; status: number } {

@@ -19,6 +19,7 @@ interface ConversationListItem {
   title: string | null;
   userIdentifier: string | null;
   channel: "whatsapp" | null;
+  preview: string;
 }
 
 interface ConversationDetail {
@@ -39,10 +40,6 @@ function formatDate(unixSeconds: number | null): string {
   }).format(new Date(unixSeconds * 1000));
 }
 
-function preview(conversation: ConversationListItem): string {
-  return conversation.summary ?? conversation.title ?? "Ei esikatselua saatavilla";
-}
-
 function directionLabel(direction: string | null): string | null {
   if (!direction) return null;
   const value = direction.toLowerCase();
@@ -51,11 +48,12 @@ function directionLabel(direction: string | null): string | null {
   return direction;
 }
 
-function StatusBadge({ status }: { status: string | null }) {
-  if (!status) return null;
+function StatusBadge({ status, successful }: { status: string | null; successful: boolean | null }) {
+  const failed = successful === false || /fail|error/i.test(status ?? "");
+  if (!failed) return null;
   return (
-    <span className="rounded-full bg-sand-200 px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
-      {status}
+    <span className="rounded-full bg-danger-bg px-2 py-0.5 text-[11px] font-semibold text-danger-strong">
+      {status && /fail|error/i.test(status) ? status : "Epäonnistui"}
     </span>
   );
 }
@@ -87,14 +85,15 @@ function ConversationList({
                 <p className="truncate text-sm font-semibold text-text-primary">
                   {conversation.userIdentifier ?? "WhatsApp-käyttäjä"}
                 </p>
-                <p className="mt-0.5 text-xs text-text-tertiary">{formatDate(conversation.startedAtUnixSecs)}</p>
               </div>
-              <StatusBadge status={conversation.status} />
+              <StatusBadge status={conversation.status} successful={conversation.successful} />
             </div>
-            <p className="mt-2 line-clamp-2 text-sm text-text-secondary">{preview(conversation)}</p>
-            <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-medium text-text-tertiary">
-              {directionLabel(conversation.direction) && <span>{directionLabel(conversation.direction)}</span>}
+            <p className="mt-1.5 line-clamp-2 text-sm text-text-secondary">{conversation.preview}</p>
+            <p className="mt-2 text-xs text-text-tertiary">{formatDate(conversation.startedAtUnixSecs)}</p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px] font-medium text-text-tertiary">
               {conversation.channel === "whatsapp" && <span>WhatsApp</span>}
+              {conversation.channel === "whatsapp" && directionLabel(conversation.direction) && <span>·</span>}
+              {directionLabel(conversation.direction) && <span>{directionLabel(conversation.direction)}</span>}
             </div>
           </button>
         );
