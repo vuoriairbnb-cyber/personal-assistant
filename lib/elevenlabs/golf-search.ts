@@ -12,6 +12,14 @@ export class GolfToolError extends Error { readonly status: number; constructor(
 function validDate(value: string): boolean { return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T12:00:00Z`).getTime()) && new Date(`${value}T12:00:00Z`).toISOString().slice(0, 10) === value; }
 function validTime(value: string): boolean { return /^([01]\d|2[0-3]):[0-5]\d$/.test(value); }
 function normalized(value: string): string { return value.trim().toLocaleLowerCase("fi-FI"); }
+function optionalTime(value: unknown): string | null {
+  if (value === undefined) return null;
+  if (typeof value !== "string") throw new GolfToolError("Invalid request");
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!validTime(trimmed)) throw new GolfToolError("Invalid request");
+  return trimmed;
+}
 
 export function validateGolfToolQuery(input: unknown): NormalizedGolfToolQuery {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new GolfToolError("Invalid request");
@@ -26,9 +34,9 @@ export function validateGolfToolQuery(input: unknown): NormalizedGolfToolQuery {
   const courses = [...uniqueCourses.values()];
   if (courses.length > MAX_COURSES || (!searchAllSupported && courses.length === 0)) throw new GolfToolError("Invalid request");
   if (typeof body.date !== "string" || !validDate(body.date)) throw new GolfToolError("Invalid request");
-  const timeFrom = body.time_from === undefined ? null : typeof body.time_from === "string" && validTime(body.time_from) ? body.time_from : null;
-  const timeTo = body.time_to === undefined ? null : typeof body.time_to === "string" && validTime(body.time_to) ? body.time_to : null;
-  if ((body.time_from !== undefined && !timeFrom) || (body.time_to !== undefined && !timeTo) || (timeFrom && timeTo && timeFrom > timeTo)) throw new GolfToolError("Invalid request");
+  const timeFrom = optionalTime(body.time_from);
+  const timeTo = optionalTime(body.time_to);
+  if (timeFrom && timeTo && timeFrom > timeTo) throw new GolfToolError("Invalid request");
   const players = body.players === undefined ? 1 : body.players;
   if (typeof players !== "number" || !Number.isInteger(players) || players < 1 || players > 4) throw new GolfToolError("Invalid request");
   return { courses, searchAllSupported, date: body.date, timeFrom, timeTo, players, userId: typeof body.user_id === "string" && body.user_id.length <= 160 ? body.user_id : null };

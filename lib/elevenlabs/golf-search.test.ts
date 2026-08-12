@@ -13,6 +13,17 @@ test("golf tool validates bounded one-day requests", () => {
   assert.deepEqual(validateGolfToolQuery({ ...base, courses: [" HGK ", "hgk"], time_from: "15:00", time_to: "16:00" }), { courses: ["hgk"], searchAllSupported: false, date: "2026-08-14", timeFrom: "15:00", timeTo: "16:00", players: 2, userId: null });
 });
 
+test("golf tool normalizes empty optional time fields", () => {
+  const request = (times: Record<string, string>) => validateGolfToolQuery({ ...base, courses: ["HGK"], ...times });
+  assert.deepEqual(request({ time_from: "16:00", time_to: "" }).timeFrom, "16:00");
+  assert.equal(request({ time_from: "16:00", time_to: "" }).timeTo, null);
+  assert.equal(request({ time_from: "", time_to: "17:00" }).timeFrom, null);
+  assert.equal(request({ time_from: "", time_to: "17:00" }).timeTo, "17:00");
+  assert.deepEqual(request({ time_from: "  ", time_to: "\t" }).timeFrom, null);
+  assert.deepEqual(request({ time_from: "  ", time_to: "\t" }).timeTo, null);
+  assert.throws(() => request({ time_from: "foo", time_to: "" }), /Invalid request/);
+});
+
 test("golf tool resolves supported and unsupported courses deterministically", () => {
   const partial = resolveGolfCourses(validateGolfToolQuery({ ...base, courses: ["HGK", "Peuramaa"] }));
   assert.deepEqual(partial.supportedCourses, ["Helsingin Golfklubi"]);
