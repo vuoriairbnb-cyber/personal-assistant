@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { NextResponse, type NextRequest } from "next/server";
 import { requireApprovedUser } from "@/lib/auth/guard";
 import {
@@ -11,6 +12,7 @@ import {
 } from "@/lib/golf/clubs";
 import { fetchCalendarSettings, fetchReservations } from "@/lib/golf/client";
 import { computeFreeSlots, getCalendarVisibility } from "@/lib/golf/availability";
+import { searchCourseDay } from "@/lib/golf/search";
 import type {
   CalendarSettingsResponse,
   ClubDayResult,
@@ -120,6 +122,14 @@ async function getCourseDayResult(
   after: string | null,
   before: string | null
 ): Promise<ClubDayResult> {
+  // The UI remains backward compatible, but its per-course availability now
+  // goes through the same server-side engine as the ElevenLabs golf tool.
+  return searchCourseDay(
+    { club, course },
+    date,
+    { min, after, before, today, helsinkiTime }
+  );
+  /*
   const base = resultBase(club, course);
   if (!isInSeason(course, date)) return { ...base, status: "kausi_kiinni", vapaat: [] };
 
@@ -162,6 +172,7 @@ async function getCourseDayResult(
   } catch {
     return { ...base, status: "virhe", vapaat: [] };
   }
+  */
 }
 
 function parseClubs(raw: string): { clubs: GolfClub[]; unknown: string[] } {

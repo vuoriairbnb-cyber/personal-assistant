@@ -20,11 +20,13 @@ interface ConversationListItem {
   userIdentifier: string | null;
   channel: "whatsapp" | null;
   preview: string;
+  adminAttention: { unsupportedCourses: string[] } | null;
 }
 
 interface ConversationDetail {
   id: string;
   messages: { role: "user" | "agent"; message: string; timeInCallSecs: number | null }[];
+  adminAttention: { unsupportedCourses: string[] } | null;
 }
 
 interface ErrorBody {
@@ -95,6 +97,7 @@ function ConversationList({
               {conversation.channel === "whatsapp" && directionLabel(conversation.direction) && <span>·</span>}
               {directionLabel(conversation.direction) && <span>{directionLabel(conversation.direction)}</span>}
             </div>
+            {conversation.adminAttention && <p className="mt-2 text-xs font-semibold text-warning-strong">⚠ Ylläpidon huomio: {conversation.adminAttention.unsupportedCourses.join(", ")}</p>}
           </button>
         );
       })}
@@ -145,6 +148,12 @@ function ConversationDetailPanel({
         <div className="m-5 rounded-md border border-danger-strong bg-danger-bg p-4 text-sm text-danger-strong">{error}</div>
       ) : detail?.messages.length ? (
         <div className="space-y-3 p-5">
+          {detail.adminAttention && (
+            <div className="rounded-md border border-warning-strong bg-warning-bg p-3 text-sm text-warning-strong">
+              <p className="font-semibold">⚠ Ylläpidon huomio</p>
+              <p className="mt-1">{detail.adminAttention.unsupportedCourses.length === 1 ? "Pyydetty kenttä ei ole vielä tuettu" : "Pyydetyt kentät eivät ole vielä tuettuja"}: {detail.adminAttention.unsupportedCourses.join(", ")}</p>
+            </div>
+          )}
           {detail.messages.map((message, index) => {
             const isUser = message.role === "user";
             return (

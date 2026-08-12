@@ -8,12 +8,24 @@ import type { CalendarSettingsResponse, ReservationsResponse } from "@/lib/golf/
 // fetch logic for every club; only the domain + productid differ, and those
 // come from the club's config (lib/golf/clubs.ts), never hardcoded here.
 
+const REQUEST_TIMEOUT_MS = 10_000;
+
 async function getJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!response.ok) {
-    throw new Error(`WiseGolf request failed (${response.status}) for ${url}`);
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+      if (response.ok) return response.json() as Promise<T>;
+      // Retrying a 4xx would only repeat a deterministic request failure.
+      const error = new Error(`WiseGolf request failed (${response.status}) for ${url}`);
+      if (response.status < 500 || attempt === 1) throw error;
+      lastError = error;
+    } catch (error) {
+      if (error instanceof Error && /\(4\d\d\)/.test(error.message)) throw error;
+      lastError = error;
+    }
   }
-  return response.json() as Promise<T>;
+  throw lastError instanceof Error ? lastError : new Error("WiseGolf request failed");
 }
 
 function baseUrl(club: GolfClub): string {

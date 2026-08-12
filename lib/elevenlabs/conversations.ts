@@ -19,6 +19,7 @@ export interface ConversationListItem {
   userIdentifier: string | null;
   channel: "whatsapp" | null;
   preview: string;
+  adminAttention: { unsupportedCourses: string[] } | null;
 }
 
 export interface ConversationTranscriptMessage {
@@ -31,6 +32,7 @@ export interface ConversationDetail {
   id: string;
   userId: string | null;
   messages: ConversationTranscriptMessage[];
+  adminAttention: { unsupportedCourses: string[] } | null;
 }
 
 class ElevenLabsError extends Error {
@@ -55,6 +57,24 @@ function asNumber(value: unknown): number | null {
 
 function asBoolean(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
+}
+
+function adminAttentionFromTranscript(transcript: unknown[]): { unsupportedCourses: string[] } | null {
+  const unsupported = new Set<string>();
+  const inspect = (value: unknown) => {
+    if (typeof value === "string") {
+      try { inspect(JSON.parse(value)); } catch { /* regular message text */ }
+      return;
+    }
+    const record = asRecord(value);
+    if (!record) return;
+    if (record.admin_attention === true && Array.isArray(record.unsupported_courses)) {
+      record.unsupported_courses.forEach((course) => { const name = asString(course); if (name) unsupported.add(name); });
+    }
+    Object.values(record).forEach(inspect);
+  };
+  transcript.forEach(inspect);
+  return unsupported.size ? { unsupportedCourses: [...unsupported] } : null;
 }
 
 function getConfig() {
@@ -129,6 +149,7 @@ function mapListItem(value: unknown): ConversationListItem | null {
     userIdentifier: displayUserIdentifier(userIdentifier, channel, direction),
     channel,
     preview: summary ?? title ?? "Ei viestin esikatselua",
+    adminAttention: null,
   };
 }
 
@@ -151,6 +172,7 @@ export async function listConversations(): Promise<ConversationListItem[]> {
         ...item,
         userIdentifier: displayUserIdentifier(detail.userId ?? item.userIdentifier, item.channel, item.direction),
         preview: firstUserMessage ?? item.summary ?? item.title ?? "Ei viestin esikatselua",
+        adminAttention: detail.adminAttention,
       };
     } catch {
       // One failed detail request must never make the inbox unavailable. The
@@ -199,7 +221,7 @@ export async function getConversation(conversationId: string): Promise<Conversat
     return [{ role, message, timeInCallSecs: asNumber(item?.time_in_call_secs) } as ConversationTranscriptMessage];
   });
 
-  return { id: conversationId, userId: asString(payload?.user_id), messages };
+  return { id: conversationId, userId: asString(payload?.user_id), messages, adminAttention: adminAttentionFromTranscript(transcript) };
 }
 
 export function toPublicError(error: unknown): { message: string; status: number } {

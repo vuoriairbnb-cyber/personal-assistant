@@ -292,7 +292,12 @@ export type Database = {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      take_golf_rate_limit: {
+        Args: { p_user_hash: string };
+        Returns: { allowed: boolean; retry_after_seconds: number }[];
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
