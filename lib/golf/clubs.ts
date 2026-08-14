@@ -288,6 +288,7 @@ export const KLUBIT: GolfClub[] = [
     domain: "api.vuosaarigolf.fi",
     aliases: ["vuosaari golf", "vuosaarigolf", "vuosaari"],
     bookingUrl: "https://vuosaarigolf.fi",
+    playerSearch: { enabled: true, auth: { type: "wisegolf-access-token", envVar: "VUOSAARI_WISEGOLF_ACCESS_TOKEN", sessionType: "wisegolf" } },
     kentat: [
       {
         id: "vuosaari",
