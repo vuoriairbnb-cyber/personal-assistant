@@ -107,6 +107,7 @@ export const KLUBIT: GolfClub[] = [
       domain: "api.hirsalagolf.fi",
       aliases: ["hirsala golf", "hirsala"],
       bookingUrl: "https://hirsalagolf.fi",
+      playerSearch: { enabled: true, auth: { type: "wisegolf-access-token", envVar: "HIRSALA_WISEGOLF_ACCESS_TOKEN", sessionType: "wisegolf" } },
     },
     { productid: 7, horisonttiPaivia: 7 }
   ),
