@@ -159,6 +159,7 @@ export const KLUBIT: GolfClub[] = [
     domain: "api.mastergolf.fi",
     aliases: ["master golf"],
     bookingUrl: "https://mastergolf.fi",
+    playerSearch: { enabled: true, auth: { type: "wisegolf-access-token", envVar: "MASTER_WISEGOLF_ACCESS_TOKEN", sessionType: "wisegolf" } },
     kentat: [
       {
         id: "master",

@@ -12,6 +12,7 @@ test("WiseGolf player auth uses the exact lower-case token scheme and configured
   assert.equal(getClub("nordcenter")!.playerSearch?.auth.envVar, "NORDCENTER_WISEGOLF_ACCESS_TOKEN");
   assert.equal(getClub("tapiola")!.playerSearch?.auth.envVar, "TAPIOLA_WISEGOLF_ACCESS_TOKEN");
   assert.equal(getClub("hirsala")!.playerSearch?.auth.envVar, "HIRSALA_WISEGOLF_ACCESS_TOKEN");
+  assert.equal(getClub("mastergolf")!.playerSearch?.auth.envVar, "MASTER_WISEGOLF_ACCESS_TOKEN");
 });
 
 test("missing WiseGolf token fails closed", () => {
