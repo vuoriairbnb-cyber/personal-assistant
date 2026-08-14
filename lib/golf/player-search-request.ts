@@ -1,6 +1,11 @@
-import { getClub, type GolfClub } from "./clubs.ts";
+import { getClub, type GolfClub, type GolfCourse } from "./clubs.ts";
 
 const MAX_RANGE_DAYS = 31;
+export function playerSearchProducts(club: GolfClub): { productid: number; courses: GolfCourse[] }[] {
+  const groups = new Map<number, GolfCourse[]>();
+  for (const course of club.kentat) groups.set(course.productid, [...(groups.get(course.productid) ?? []), course]);
+  return [...groups.entries()].map(([productid, courses]) => ({ productid, courses }));
+}
 function validDate(value: unknown): value is string { return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T12:00:00Z`).getTime()) && new Date(`${value}T12:00:00Z`).toISOString().slice(0, 10) === value; }
 function addDays(date: string, days: number): string { const value = new Date(`${date}T12:00:00Z`); value.setUTCDate(value.getUTCDate() + days); return value.toISOString().slice(0, 10); }
 

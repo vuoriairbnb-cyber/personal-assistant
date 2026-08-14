@@ -1,8 +1,8 @@
 import "server-only";
 import { fetchAuthenticatedReservations, WiseGolfAuthRequiredError } from "./client.ts";
-import { type GolfClub, type GolfCourse } from "./clubs.ts";
+import { type GolfCourse } from "./clubs.ts";
 import { matchesPublicGolfPlayer, parsePublicGolfPlayer, parseWiseGolfLocalDateTime } from "./player-parser.ts";
-import { validatePlayerSearchRequest } from "./player-search-request.ts";
+import { playerSearchProducts, validatePlayerSearchRequest } from "./player-search-request.ts";
 
 const CONCURRENCY = 5;
 
@@ -13,9 +13,9 @@ export { matchesPublicGolfPlayer, parsePublicGolfPlayer, type PublicGolfPlayer }
 
 export { validatePlayerSearchRequest } from "./player-search-request.ts";
 
-function courseForPlayer(club: GolfClub, resourceId?: number): GolfCourse | null {
-  if (resourceId !== undefined) return club.kentat.find((course) => course.resourceId === resourceId) ?? (club.kentat.length === 1 ? club.kentat[0]! : null);
-  return club.kentat.length === 1 ? club.kentat[0]! : null;
+function courseForPlayer(courses: GolfCourse[], resourceId?: number): GolfCourse | null {
+  if (resourceId !== undefined) return courses.find((course) => course.resourceId === resourceId) ?? (courses.length === 1 ? courses[0]! : null);
+  return courses.length === 1 ? courses[0]! : null;
 }
 
 export async function searchPublicPlayers(input: ReturnType<typeof validatePlayerSearchRequest>): Promise<PlayerSearchResponse> {
@@ -29,14 +29,14 @@ export async function searchPublicPlayers(input: ReturnType<typeof validatePlaye
     while (next < work.length) {
       const current = work[next++]!;
       try {
-        const responses = await Promise.all(current.club.kentat.map((course) => fetchAuthenticatedReservations(current.club, course.productid, current.date)));
+        const responses = await Promise.all(playerSearchProducts(current.club).map(async ({ productid, courses }) => ({ courses, response: await fetchAuthenticatedReservations(current.club, productid, current.date) })));
         successfulFetches += 1;
-        for (const response of responses) {
+        for (const { courses, response } of responses) {
           const rows = Array.isArray(response.reservationsGolfPlayers) ? response.reservationsGolfPlayers : [];
           for (const raw of rows) {
             const player = parsePublicGolfPlayer(raw);
             if (!player || !matchesPublicGolfPlayer(player, input.firstName, input.familyName)) continue;
-            const course = courseForPlayer(current.club, player.resourceId);
+            const course = courseForPlayer(courses, player.resourceId);
             if (!course) continue;
             const dateTimeStart = player.dateTimeStart;
             const localTime = parseWiseGolfLocalDateTime(dateTimeStart);

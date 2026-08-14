@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { matchesPublicGolfPlayer, parsePublicGolfPlayer, parseWiseGolfLocalDateTime } from "./player-parser.ts";
 import { validatePlayerSearchRequest } from "./player-search-request.ts";
+import { playerSearchProducts } from "./player-search-request.ts";
+import { getClub } from "./clubs.ts";
 
 const publicPlayer = { firstName: "Matti", familyName: "Meikäläinen", namePublic: 1, status: "active", dateTimeStart: "2026-08-13T14:20:00", personId: 1, playerId: "secret", handicapActive: 12 };
 
@@ -26,4 +28,11 @@ test("WiseGolf local datetimes retain their supplied date and clock time", () =>
 
 test("player search rejects date ranges longer than 31 days", () => {
   assert.throws(() => validatePlayerSearchRequest({ firstName: "Matti", familyName: "Meikäläinen", clubs: ["hgk"], dateFrom: "2026-08-01", dateTo: "2026-09-01" }), /Invalid request/);
+});
+
+test("Nordcenter shares one product fetch and splits numeric resource IDs by course", () => {
+  const nordcenter = getClub("nordcenter")!;
+  assert.deepEqual(playerSearchProducts(nordcenter).map((group) => ({ productid: group.productid, courses: group.courses.map((course) => course.id) })), [{ productid: 462, courses: ["benz", "fream"] }]);
+  assert.equal(parsePublicGolfPlayer({ ...publicPlayer, resourceId: "49" })?.resourceId, 49);
+  assert.equal(parsePublicGolfPlayer({ ...publicPlayer, resourceId: "51" })?.resourceId, 51);
 });

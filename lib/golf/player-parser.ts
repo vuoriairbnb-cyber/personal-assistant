@@ -9,7 +9,8 @@ export function parsePublicGolfPlayer(value: unknown): PublicGolfPlayer | null {
   if (typeof row.firstName !== "string" || !row.firstName.trim() || typeof row.familyName !== "string" || !row.familyName.trim()) return null;
   if (row.namePublic !== undefined && row.namePublic !== null && row.namePublic !== 1 && row.namePublic !== true) return null;
   if (!isActive(row.status) || typeof row.dateTimeStart !== "string" || !row.dateTimeStart) return null;
-  return { firstName: row.firstName, familyName: row.familyName, dateTimeStart: row.dateTimeStart, ...(typeof row.resourceId === "number" ? { resourceId: row.resourceId } : {}) };
+  const resourceId = typeof row.resourceId === "number" ? row.resourceId : typeof row.resourceId === "string" && /^\d+$/.test(row.resourceId) ? Number(row.resourceId) : undefined;
+  return { firstName: row.firstName, familyName: row.familyName, dateTimeStart: row.dateTimeStart, ...(resourceId !== undefined ? { resourceId } : {}) };
 }
 
 export function matchesPublicGolfPlayer(player: PublicGolfPlayer, firstName: string, familyName: string): boolean {

@@ -216,6 +216,7 @@ export const KLUBIT: GolfClub[] = [
     domain: "api.nordcenter.fi",
     aliases: ["nordcenter"],
     bookingUrl: "https://nordcenter.fi",
+    playerSearch: { enabled: true, auth: { type: "wisegolf-access-token", envVar: "NORDCENTER_WISEGOLF_ACCESS_TOKEN", sessionType: "wisegolf" } },
     kentat: [
       {
         id: "benz",
