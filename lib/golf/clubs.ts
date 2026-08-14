@@ -96,6 +96,7 @@ export const KLUBIT: GolfClub[] = [
       domain: "api.tapiolagolf.fi",
       aliases: ["tapiola golf", "tapiola"],
       bookingUrl: "https://tapiolagolf.fi",
+      playerSearch: { enabled: true, auth: { type: "wisegolf-access-token", envVar: "TAPIOLA_WISEGOLF_ACCESS_TOKEN", sessionType: "wisegolf" } },
     },
     { productid: 7, horisonttiPaivia: 5 }
   ),
