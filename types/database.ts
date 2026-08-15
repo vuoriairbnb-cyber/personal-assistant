@@ -20,6 +20,7 @@ export type CalendarConnectionStatus = "connected" | "syncing" | "error" | "disc
 /** DB-level source — narrower than the client's CalendarEventSource: 'trip' is
  * never stored here, it's synthesized at the query layer from the trips table. */
 export type CalendarEventDbSource = "manual" | "airbnb" | "google";
+export type GolfWatchStatus = "active" | "processing" | "matched" | "expired" | "cancelled";
 
 export type Database = {
   public: {
@@ -290,6 +291,51 @@ export type Database = {
         };
         Relationships: [];
       };
+      golf_watches: {
+        Row: {
+          id: string; user_id: string; courses: string[]; search_all_supported: boolean;
+          date: string; time_from: string | null; time_to: string | null; players: number;
+          status: GolfWatchStatus; created_at: string; updated_at: string;
+          last_checked_at: string | null; next_check_at: string | null; expires_at: string;
+          processing_started_at: string | null; matched_at: string | null;
+          matched_course: string | null; matched_time: string | null;
+          matched_available_spots: number | null; matched_payload: Record<string, unknown> | null;
+          [key: string]: unknown;
+        };
+        Insert: {
+          id?: string; user_id: string; courses: string[]; search_all_supported?: boolean;
+          date: string; time_from?: string | null; time_to?: string | null; players: number;
+          status?: GolfWatchStatus; last_checked_at?: string | null; next_check_at?: string | null;
+          expires_at: string; processing_started_at?: string | null; matched_at?: string | null;
+          matched_course?: string | null; matched_time?: string | null;
+          matched_available_spots?: number | null; matched_payload?: Record<string, unknown> | null;
+          [key: string]: unknown;
+        };
+        Update: {
+          courses?: string[]; search_all_supported?: boolean; date?: string;
+          time_from?: string | null; time_to?: string | null; players?: number;
+          status?: GolfWatchStatus; last_checked_at?: string | null; next_check_at?: string | null;
+          expires_at?: string; processing_started_at?: string | null; matched_at?: string | null;
+          matched_course?: string | null; matched_time?: string | null;
+          matched_available_spots?: number | null; matched_payload?: Record<string, unknown> | null;
+          [key: string]: unknown;
+        };
+        Relationships: [];
+      };
+      notification_outbox: {
+        Row: {
+          id: string; user_id: string; event_type: string; source_type: string; source_id: string;
+          payload: Record<string, unknown>; status: string; created_at: string; processed_at: string | null;
+          channel: string | null; delivery_attempts: number; last_error: string | null; [key: string]: unknown;
+        };
+        Insert: {
+          id?: string; user_id: string; event_type: string; source_type: string; source_id: string;
+          payload: Record<string, unknown>; status?: string; processed_at?: string | null;
+          channel?: string | null; delivery_attempts?: number; last_error?: string | null; [key: string]: unknown;
+        };
+        Update: { status?: string; processed_at?: string | null; channel?: string | null; delivery_attempts?: number; last_error?: string | null; [key: string]: unknown; };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -297,6 +343,8 @@ export type Database = {
         Args: { p_user_hash: string };
         Returns: { allowed: boolean; retry_after_seconds: number }[];
       };
+      claim_due_golf_watches: { Args: { p_limit?: number }; Returns: Database["public"]["Tables"]["golf_watches"]["Row"][] };
+      complete_golf_watch_match: { Args: { p_watch_id: string; p_course: string; p_time: string; p_available_spots: number; p_payload: Record<string, unknown> }; Returns: boolean };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

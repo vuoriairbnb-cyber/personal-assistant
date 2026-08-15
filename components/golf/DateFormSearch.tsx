@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils/cn";
 import { SegmentedControl } from "@/components/golf/SegmentedControl";
 import type { DayGroup } from "@/lib/golf/types";
+import type { WatchSearch } from "@/components/golf/GolfWatches";
+import { getClub } from "@/lib/golf/clubs";
 
 const PLAYER_COUNTS = [1, 2, 3, 4] as const;
 const DAY_COUNT = 14;
@@ -30,12 +32,14 @@ export function DateFormSearch({
   onSearching,
   onResults,
   onError,
+  onWatchSearch,
 }: {
   selectedClubs: Set<string>;
   selectedCourses: Set<string>;
   onSearching: () => void;
   onResults: (results: DayGroup[]) => void;
   onError: (message: string) => void;
+  onWatchSearch: (search: WatchSearch | null) => void;
 }) {
   const [players, setPlayers] = useState<number>(1);
   const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set());
@@ -77,6 +81,9 @@ export function DateFormSearch({
     const courses = Array.from(selectedCourses).filter((entry) =>
       selectedClubs.has(entry.split(":")[0] ?? "")
     );
+    const watchCourses = courses.length > 0 ? courses : Array.from(selectedClubs).flatMap((clubId) =>
+      (getClub(clubId)?.kentat ?? []).map((course) => `${clubId}:${course.id}`)
+    );
     if (courses.length > 0) params.course = courses.join(",");
     if (timeMode === "after") params.after = afterTime;
     else if (timeMode === "before") params.before = beforeTime;
@@ -87,6 +94,7 @@ export function DateFormSearch({
 
     try {
       const dates = Array.from(selectedDates).sort();
+      onWatchSearch(dates.length === 1 ? { courses: watchCourses, date: dates[0]!, timeFrom: params.after ?? null, timeTo: params.before ?? null, players } : null);
       const results = await Promise.all(
         dates.map(async (date) => {
           const search = new URLSearchParams({ date, ...params });

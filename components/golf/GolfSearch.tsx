@@ -11,6 +11,7 @@ import { CourseMultiSelect } from "@/components/golf/CourseMultiSelect";
 import { DateFormSearch } from "@/components/golf/DateFormSearch";
 import { DayGroupResults } from "@/components/golf/DayGroupResults";
 import { PlayerSearch } from "@/components/golf/PlayerSearch";
+import { GolfWatches, type WatchSearch } from "@/components/golf/GolfWatches";
 import { parseGolfQuery, toSearchParams } from "@/lib/golf/parse-query";
 import { KLUBIT, DEFAULT_CLUB_ID, detectClub, detectCourse, getClub } from "@/lib/golf/clubs";
 import type { DayGroup } from "@/lib/golf/types";
@@ -44,6 +45,14 @@ export function GolfSearch() {
   const [results, setResults] = useState<DayGroup[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [watchSearch, setWatchSearch] = useState<WatchSearch | null>(null);
+
+  function allCoursesFor(clubs: Set<string>, courseEntries: Set<string>) {
+    const selected = Array.from(courseEntries).filter((entry) => clubs.has(entry.split(":")[0] ?? ""));
+    return selected.length > 0 ? selected : Array.from(clubs).flatMap((clubId) =>
+      (getClub(clubId)?.kentat ?? []).map((course) => `${clubId}:${course.id}`)
+    );
+  }
 
   async function runTextSearch(query: string) {
     setLoading(true);
@@ -75,14 +84,10 @@ export function GolfSearch() {
       const parsed = parseGolfQuery(query);
       const params = toSearchParams(parsed);
       params.set("club", Array.from(searchClubs).join(","));
-      if (detectedCourse) {
-        params.set("course", `${detectedCourse.club.id}:${detectedCourse.course.id}`);
-      } else {
-        const courses = Array.from(selectedCourses).filter((entry) =>
-          searchClubs.has(entry.split(":")[0] ?? "")
-        );
-        if (courses.length > 0) params.set("course", courses.join(","));
-      }
+      const watchCourses = detectedCourse
+        ? [`${detectedCourse.club.id}:${detectedCourse.course.id}`]
+        : allCoursesFor(searchClubs, selectedCourses);
+      if (watchCourses.length > 0) params.set("course", watchCourses.join(","));
       const response = await fetch(`/api/golf?${params.toString()}`);
       const body = (await response.json()) as { results: DayGroup[] } | ErrorBody;
 
@@ -91,9 +96,11 @@ export function GolfSearch() {
       }
 
       setResults("results" in body ? body.results : []);
+      setWatchSearch(parsed.date ? { courses: watchCourses, date: parsed.date, timeFrom: parsed.after ?? null, timeTo: parsed.before ?? null, players: parsed.min ?? 1 } : null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Haku epäonnistui.");
       setResults(null);
+      setWatchSearch(null);
     } finally {
       setLoading(false);
     }
@@ -120,6 +127,7 @@ export function GolfSearch() {
     setError(message);
     setResults(null);
     setLoading(false);
+    setWatchSearch(null);
   }
 
   function handleClubsChange(next: Set<string>) {
@@ -206,6 +214,7 @@ export function GolfSearch() {
           }}
           onResults={handleFormResults}
           onError={handleFormError}
+          onWatchSearch={setWatchSearch}
         />
       )}
 
@@ -249,6 +258,7 @@ export function GolfSearch() {
         <Lock size={12} strokeWidth={1.75} />
         Vain haku — varaus tehdään aina käsin yllä olevista linkeistä.
       </p>
+      <GolfWatches watchSearch={results ? watchSearch : null} />
       </>}
     </div>
   );
