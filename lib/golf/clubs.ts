@@ -117,6 +117,7 @@ export const KLUBIT: GolfClub[] = [
     domain: "api.pickalagolf.fi",
     aliases: ["pickala golf", "pickala"],
     bookingUrl: "https://pickalagolf.fi",
+    playerSearch: { enabled: true, auth: { type: "wisegolf-access-token", envVar: "PICKALA_WISEGOLF_ACCESS_TOKEN", sessionType: "wisegolf" } },
     kentat: [
       {
         id: "forest",
