@@ -1,4 +1,3 @@
 {
-  "framework": "nextjs",
-  "crons": [{ "path": "/api/cron/golf-watches", "schedule": "*/5 * * * *" }]
+  "framework": "nextjs"
 }
