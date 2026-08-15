@@ -196,6 +196,7 @@ export const KLUBIT: GolfClub[] = [
     domain: "api.keimolagolf.com",
     aliases: ["keimola golf", "keimola"],
     bookingUrl: "https://keimolagolf.com",
+    playerSearch: { enabled: true, auth: { type: "wisegolf-access-token", envVar: "KEIMOLA_WISEGOLF_ACCESS_TOKEN", sessionType: "wisegolf" } },
     // Saras is intentionally the only configured/searchable Keimola course.
     // Kirkka and its internal ball-run views are not user-facing courses and
     // therefore have no entry here.
