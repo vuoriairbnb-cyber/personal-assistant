@@ -326,14 +326,16 @@ export type Database = {
         Row: {
           id: string; user_id: string; event_type: string; source_type: string; source_id: string;
           payload: Record<string, unknown>; status: string; created_at: string; processed_at: string | null;
-          channel: string | null; delivery_attempts: number; last_error: string | null; [key: string]: unknown;
+          channel: string | null; delivery_attempts: number; last_error: string | null;
+          processing_started_at: string | null; provider_message_id: string | null; [key: string]: unknown;
         };
         Insert: {
           id?: string; user_id: string; event_type: string; source_type: string; source_id: string;
           payload: Record<string, unknown>; status?: string; processed_at?: string | null;
-          channel?: string | null; delivery_attempts?: number; last_error?: string | null; [key: string]: unknown;
+          channel?: string | null; delivery_attempts?: number; last_error?: string | null;
+          processing_started_at?: string | null; provider_message_id?: string | null; [key: string]: unknown;
         };
-        Update: { status?: string; processed_at?: string | null; channel?: string | null; delivery_attempts?: number; last_error?: string | null; [key: string]: unknown; };
+        Update: { status?: string; processed_at?: string | null; channel?: string | null; delivery_attempts?: number; last_error?: string | null; processing_started_at?: string | null; provider_message_id?: string | null; [key: string]: unknown; };
         Relationships: [];
       };
     };
@@ -345,6 +347,7 @@ export type Database = {
       };
       claim_due_golf_watches: { Args: { p_limit?: number }; Returns: Database["public"]["Tables"]["golf_watches"]["Row"][] };
       complete_golf_watch_match: { Args: { p_watch_id: string; p_course: string; p_time: string; p_available_spots: number; p_payload: Record<string, unknown> }; Returns: boolean };
+      claim_pending_notification_outbox: { Args: { p_limit?: number }; Returns: Database["public"]["Tables"]["notification_outbox"]["Row"][] };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

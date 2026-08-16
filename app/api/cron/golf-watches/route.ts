@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { processDueGolfWatches } from "@/lib/golf/watches";
+import { processPendingNotifications } from "@/lib/notifications/dispatcher";
 
 function authorized(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -17,9 +18,10 @@ export async function GET(request: NextRequest) {
   console.info("[golf-watch] cron started");
   try {
     const summary = await processDueGolfWatches();
+    const notifications = await processPendingNotifications();
     const durationMs = Date.now() - startedAt;
     console.info("[golf-watch] cron complete", { ...summary, durationMs });
-    return NextResponse.json({ ok: true, ...summary, duration_ms: durationMs });
+    return NextResponse.json({ ok: true, ...summary, notifications, duration_ms: durationMs });
   } catch (error) {
     const durationMs = Date.now() - startedAt;
     console.error("[golf-watch] cron failed", { error: { name: error instanceof Error ? error.name : "Error", message: "cron processing unavailable" }, durationMs });
