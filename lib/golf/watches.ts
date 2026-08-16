@@ -5,7 +5,7 @@ import { KLUBIT, getClub, getCourse } from "@/lib/golf/clubs";
 import { helsinkiNow, searchCourseDay, type GolfSearchTarget } from "@/lib/golf/search";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { normalizeGolfWatchInput, WatchInputError } from "./watch-input";
-import { earliestWatchMatch } from "./watch-matching";
+import { bookableWatchMatches } from "./watch-matching";
 export { MAX_WATCH_COURSES } from "./watch-input";
 
 export const MAX_ACTIVE_GOLF_WATCHES = 3;
@@ -121,17 +121,18 @@ export async function processDueGolfWatches(limit = 25) {
     try {
       const targets = targetsForWatch(watch);
       const days = await Promise.all(targets.map((target) => searchCourseDay(target, watch.date, { min: watch.players, after: watch.time_from, before: watch.time_to })));
-      const match = earliestWatchMatch(days);
-      if (!match) {
+      const matches = bookableWatchMatches(days).map((match) => ({ ...match, date: watch.date }));
+      if (matches.length === 0) {
         const nextCheckAt = await rescheduleWatch(service, watch.id);
         rescheduled += 1;
-        console.info("[golf-watch] watch rescheduled after failure", { watchId: watch.id, nextCheckAt });
+        console.info("[golf-watch] watch no match", { watchId: watch.id, nextCheckAt });
         continue;
       }
+      const match = matches[0]!;
       const payload = {
         watch_id: watch.id, course: match.course, date: watch.date, time: match.time,
         available_spots: match.availableSpots, players: watch.players,
-        time_from: watch.time_from, time_to: watch.time_to,
+        time_from: watch.time_from, time_to: watch.time_to, matches: matches.map(({ course, date, time, availableSpots }) => ({ course, date, time, available_spots: availableSpots })),
       };
       const completed = await service.rpc("complete_golf_watch_match", {
         p_watch_id: watch.id, p_course: match.course, p_time: match.time,

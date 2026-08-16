@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { earliestWatchMatch } from "./watch-matching.ts";
+import { bookableWatchMatches, earliestWatchMatch } from "./watch-matching.ts";
 
 const day = (courseName: string, status: "ok" | "virhe", times: [string, number][] = []) => ({
   club: courseName, nimi: courseName, clubId: courseName, clubName: courseName, courseId: courseName,
@@ -13,4 +13,13 @@ test("a watch match chooses the earliest matching slot deterministically", () =>
 
 test("provider failures and empty results never produce a false match", () => {
   assert.equal(earliestWatchMatch([day("Alpha", "virhe"), day("Beta", "ok")]), null);
+});
+
+test("watch ignores visible slots that are not bookable yet and retains every bookable match", () => {
+  const result = day("Alpha", "ok", [["18:36", 4], ["18:45", 4], ["19:00", 2]]);
+  result.vapaat[1]!.bookableNow = false;
+  assert.deepEqual(bookableWatchMatches([result]), [
+    { course: "Alpha", time: "18:36", availableSpots: 4 },
+    { course: "Alpha", time: "19:00", availableSpots: 2 },
+  ]);
 });

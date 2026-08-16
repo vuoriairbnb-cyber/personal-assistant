@@ -13,6 +13,15 @@ test("Telegram message uses the deterministic golf-watch template", () => {
   assert.match(text, /2 pelaajaa/);
 });
 
+test("Telegram message includes every match and groups multiple times by course", () => {
+  const text = formatGolfWatchTelegramMessage({ ...event.payload, matches: [
+    { course: "Helsingin Golfklubi", date: "2026-08-17", time: "18:36", available_spots: 4 },
+    { course: "Helsingin Golfklubi", date: "2026-08-17", time: "18:45", available_spots: 4 },
+    { course: "Kullo Golf", date: "2026-08-17", time: "19:00", available_spots: 2 },
+  ] });
+  assert.match(text, /löysi aikoja/); assert.match(text, /18:36 — 4 paikkaa/); assert.match(text, /18:45 — 4 paikkaa/); assert.match(text, /Kullo Golf/);
+});
+
 test("TelegramSender uses configured Bot API URL and chat ID", async () => {
   const originalFetch = globalThis.fetch;
   const previousToken = process.env.TELEGRAM_BOT_TOKEN;
