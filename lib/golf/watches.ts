@@ -82,23 +82,52 @@ export async function cancelGolfWatch(supabase: UserClient, userId: string, id: 
 }
 
 async function rescheduleWatch(service: UserClient, id: string) {
-  const { error } = await service.from("golf_watches").update({ status: "active", processing_started_at: null, last_checked_at: new Date().toISOString(), next_check_at: new Date(Date.now() + 5 * 60_000).toISOString() }).eq("id", id).eq("status", "processing");
+  const now = new Date();
+  const nextCheckAt = new Date(now.getTime() + 5 * 60_000).toISOString();
+  const { error } = await service.from("golf_watches").update({ status: "active", processing_started_at: null, last_checked_at: now.toISOString(), next_check_at: nextCheckAt }).eq("id", id).eq("status", "processing");
   if (error) throw error;
+  return nextCheckAt;
+}
+
+function safeErrorSummary(error: unknown) {
+  const candidate = error && typeof error === "object" ? error as { name?: unknown; status?: unknown } : {};
+  return {
+    name: typeof candidate.name === "string" && /^[\w -]{1,80}$/.test(candidate.name) ? candidate.name : "Error",
+    message: "watch processing failed",
+    ...(typeof candidate.status === "number" && Number.isFinite(candidate.status) ? { statusCode: candidate.status } : {}),
+  };
 }
 
 /** Cron-only worker. It only searches and writes an outbox event; it never delivers a notification. */
 export async function processDueGolfWatches(limit = 25) {
   const service = createServiceSupabaseClient();
+  // This is observability only. The claim RPC remains the source of truth that
+  // actually expires watches atomically before it claims due work.
+  const { data: expiringWatches } = await service.from("golf_watches")
+    .select("id").eq("status", "active").lte("expires_at", new Date().toISOString());
+  const expiredWatches = expiringWatches ?? [];
   const { data, error } = await service.rpc("claim_due_golf_watches", { p_limit: limit });
   if (error) throw new Error("Golf watch claim failed");
   const watches = (data ?? []) as GolfWatchRow[];
+  console.info("[golf-watch] due watches loaded", { count: watches.length });
   let matched = 0;
+  let rescheduled = 0;
+  let failed = 0;
   for (const watch of watches) {
+    console.info("[golf-watch] watch check started", {
+      watchId: watch.id, courses: watch.courses, searchAllSupported: watch.search_all_supported,
+      date: watch.date, timeFrom: watch.time_from, timeTo: watch.time_to, players: watch.players,
+    });
     try {
       const targets = targetsForWatch(watch);
       const days = await Promise.all(targets.map((target) => searchCourseDay(target, watch.date, { min: watch.players, after: watch.time_from, before: watch.time_to })));
       const match = earliestWatchMatch(days);
-      if (!match) { await rescheduleWatch(service, watch.id); continue; }
+      if (!match) {
+        const nextCheckAt = await rescheduleWatch(service, watch.id);
+        rescheduled += 1;
+        console.info("[golf-watch] watch rescheduled after failure", { watchId: watch.id, nextCheckAt });
+        continue;
+      }
       const payload = {
         watch_id: watch.id, course: match.course, date: watch.date, time: match.time,
         available_spots: match.availableSpots, players: watch.players,
@@ -109,11 +138,29 @@ export async function processDueGolfWatches(limit = 25) {
         p_available_spots: match.availableSpots, p_payload: payload,
       });
       if (completed.error) throw completed.error;
-      if (completed.data) matched += 1;
-    } catch {
+      if (completed.data) {
+        matched += 1;
+        console.info("[golf-watch] watch matched", {
+          watchId: watch.id, course: match.course, date: watch.date,
+          time: match.time, availableSpots: match.availableSpots,
+        });
+      }
+    } catch (error) {
       // Provider and transient infrastructure failures stay recoverable and retry on the next run.
-      try { await rescheduleWatch(service, watch.id); } catch { /* leave the 15-minute lease recovery path available */ }
+      failed += 1;
+      console.error("[golf-watch] watch check failed", { watchId: watch.id, error: safeErrorSummary(error) });
+      try {
+        const nextCheckAt = await rescheduleWatch(service, watch.id);
+        rescheduled += 1;
+        console.info("[golf-watch] watch no match", { watchId: watch.id, nextCheckAt });
+      } catch (rescheduleError) {
+        console.error("[golf-watch] watch check failed", { watchId: watch.id, error: safeErrorSummary(rescheduleError) });
+      }
     }
   }
-  return { claimed: watches.length, matched };
+  for (const watch of expiredWatches) {
+    // Only the watch UUID is logged; no user or provider data is included.
+    console.info("[golf-watch] watch expired", { watchId: watch.id });
+  }
+  return { processed: watches.length, matched, rescheduled, expired: expiredWatches.length, failed };
 }

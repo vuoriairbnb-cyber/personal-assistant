@@ -13,6 +13,16 @@ function authorized(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   if (!authorized(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  try { return NextResponse.json({ ok: true, ...(await processDueGolfWatches()) }); }
-  catch { return NextResponse.json({ ok: false, error: "Golf watch processing unavailable" }, { status: 503 }); }
+  const startedAt = Date.now();
+  console.info("[golf-watch] cron started");
+  try {
+    const summary = await processDueGolfWatches();
+    const durationMs = Date.now() - startedAt;
+    console.info("[golf-watch] cron complete", { ...summary, durationMs });
+    return NextResponse.json({ ok: true, ...summary, duration_ms: durationMs });
+  } catch (error) {
+    const durationMs = Date.now() - startedAt;
+    console.error("[golf-watch] cron failed", { error: { name: error instanceof Error ? error.name : "Error", message: "cron processing unavailable" }, durationMs });
+    return NextResponse.json({ ok: false, error: "Golf watch processing unavailable" }, { status: 503 });
+  }
 }
