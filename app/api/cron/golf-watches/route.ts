@@ -1,30 +1,20 @@
-import { timingSafeEqual } from "node:crypto";
-import { NextResponse, type NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { processDueGolfWatches } from "@/lib/golf/watches";
 import { processPendingNotifications } from "@/lib/notifications/dispatcher";
+import { createGolfWatchCronHandler } from "@/lib/golf/cron-handler";
 
-function authorized(request: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  const supplied = request.headers.get("authorization")?.replace(/^Bearer\s+/, "");
-  if (!secret || !supplied) return false;
-  const expected = Buffer.from(secret);
-  const received = Buffer.from(supplied);
-  return expected.length === received.length && timingSafeEqual(expected, received);
+const handleCron = createGolfWatchCronHandler({
+  secret: process.env.CRON_SECRET,
+  processWatches: processDueGolfWatches,
+  processNotifications: processPendingNotifications,
+});
+
+// Supabase Cron invokes this route with POST. GET is retained for safe manual
+// verification and both methods intentionally share the exact same flow.
+export async function POST(request: NextRequest) {
+  return handleCron(request);
 }
 
 export async function GET(request: NextRequest) {
-  if (!authorized(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const startedAt = Date.now();
-  console.info("[golf-watch] cron started");
-  try {
-    const summary = await processDueGolfWatches();
-    const notifications = await processPendingNotifications();
-    const durationMs = Date.now() - startedAt;
-    console.info("[golf-watch] cron complete", { ...summary, durationMs });
-    return NextResponse.json({ ok: true, ...summary, notifications, duration_ms: durationMs });
-  } catch (error) {
-    const durationMs = Date.now() - startedAt;
-    console.error("[golf-watch] cron failed", { error: { name: error instanceof Error ? error.name : "Error", message: "cron processing unavailable" }, durationMs });
-    return NextResponse.json({ ok: false, error: "Golf watch processing unavailable" }, { status: 503 });
-  }
+  return handleCron(request);
 }
