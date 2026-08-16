@@ -9,6 +9,7 @@ test("cron POST rejects missing and wrong Bearer secrets", async () => {
   const handler = createGolfWatchCronHandler({ secret: "correct", processWatches: async () => watches, processNotifications: async () => notifications });
   assert.equal((await handler(new Request("https://example.test", { method: "POST" }))).status, 401);
   assert.equal((await handler(new Request("https://example.test", { method: "POST", headers: { authorization: "Bearer wrong" } }))).status, 401);
+  assert.equal((await handler(new Request("https://example.test", { method: "POST", headers: { authorization: "abc123" } }))).status, 401);
 });
 
 test("authorized POST calls the watch processor and returns its summary", async () => {
@@ -17,6 +18,12 @@ test("authorized POST calls the watch processor and returns its summary", async 
   const response = await handler(new Request("https://example.test", { method: "POST", headers: { authorization: "Bearer correct" }, body: "{}" }));
   assert.equal(response.status, 200); assert.equal(watchCalls, 1);
   assert.deepEqual(await response.json(), { ok: true, ...watches, notifications, duration_ms: 10 });
+});
+
+test("cron auth uses a case-insensitive Bearer scheme and trims only outer whitespace", async () => {
+  const handler = createGolfWatchCronHandler({ secret: " abc123 ", processWatches: async () => watches, processNotifications: async () => notifications });
+  assert.equal((await handler(new Request("https://example.test", { method: "POST", headers: { authorization: "bearer abc123" } }))).status, 200);
+  assert.equal((await handler(new Request("https://example.test", { method: "POST", headers: { authorization: "Bearer   abc123" } }))).status, 200);
 });
 
 test("GET remains supported through the same handler", async () => {
