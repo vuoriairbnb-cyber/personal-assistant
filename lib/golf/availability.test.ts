@@ -73,6 +73,24 @@ test("calendar visibility rules override limitFutureReservations and preserve th
   );
 });
 
+test("Aulanko-style hot-time rules use generic minutes parsing and Helsinki opening instants", () => {
+  const aulankoSettings: CalendarSettingsResponse = {
+    ...settings,
+    reservationSettings: { ...settings.reservationSettings, startTime: "07:00:00", endTime: "21:00:00", duration: 10, limitFutureReservations: 0, resources: [{ resourceId: 1, quantity: 4 }] },
+    resourceRules: [{ ruleName: "kuumatAjat", resourceId: 1, startDate: null, endDate: null, startTime: "13:50:00", endTime: "14:00:00", recurrenceDays: null, ruleValue: { minutes: 360, inheritToOthers: true } }],
+  };
+  const slots = computeFreeSlots(date, aulankoSettings, [], new Date("2026-08-11T04:49:00Z"), 1);
+  const hot = slots.find((slot) => slot.aika === "13:50")!;
+  assert.equal(hot.bookableNow, false);
+  assert.equal(hot.bookingRestriction?.minutesBefore, 360);
+  assert.match(hot.bookingRestriction?.opensAt ?? "", /T07:50:00\+03:00$/);
+  assert.equal(slots.find((slot) => slot.aika === "14:00")?.bookingRestriction, undefined);
+  assert.deepEqual(getCalendarVisibility([
+    { ruleName: "kalenteriNakyvyysPaivat", resourceId: 1, startDate: null, endDate: null, startTime: "00:00:00", endTime: "23:59:00", recurrenceDays: null, ruleValue: 5 },
+    { ruleName: "kalenteriNakyvyysAvaus", resourceId: 1, startDate: null, endDate: null, startTime: "00:00:00", endTime: "23:59:00", recurrenceDays: null, ruleValue: { localTime: "07:00" } },
+  ], date, 1, 0), { days: 5, opensAt: "07:00" });
+});
+
 test("SHG resource rows remain isolated", () => {
   const rows = [row("08:00", 1), row("08:00", 1), row("08:00", 2)];
   assert.equal(availability(rows, 1, "08:00"), 2);

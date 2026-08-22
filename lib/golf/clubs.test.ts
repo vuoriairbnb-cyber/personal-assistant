@@ -4,6 +4,17 @@ import { detectClub, detectCourse, getClub } from "./clubs.ts";
 
 const kytaja = getClub("kytaja");
 const stLaurence = getClub("st-laurence");
+const aulanko = getClub("aulanko-golf");
+
+test("Aulanko Eversti uses the normal one-product WiseGolf configuration", () => {
+  assert.ok(aulanko);
+  assert.equal(aulanko.domain, "api.aulankogolf.fi");
+  assert.deepEqual(aulanko.kentat.map(({ id, nimi, productid, resourceId, paikkoja, lahtovaliMin, paivanAlku, paivanLoppu, horisonttiCalendarista, horisonttiAukeaa }) => ({ id, nimi, productid, resourceId, paikkoja, lahtovaliMin, paivanAlku, paivanLoppu, horisonttiCalendarista, horisonttiAukeaa })), [
+    { id: "eversti", nimi: "Eversti", productid: 7, resourceId: 1, paikkoja: 4, lahtovaliMin: 10, paivanAlku: "07:00", paivanLoppu: "21:00", horisonttiCalendarista: true, horisonttiAukeaa: "07:00" },
+  ]);
+  assert.equal(detectClub("Aulanko Golf")?.id, "aulanko-golf");
+  assert.equal(detectCourse("Aulanko Eversti", aulanko)?.course.id, "eversti");
+});
 
 test("St. Laurence courses are independent WiseGolf products", () => {
   assert.ok(stLaurence);
