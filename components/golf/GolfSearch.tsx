@@ -24,13 +24,10 @@ const QUICK_QUERIES = [
   "Tänä iltana",
 ];
 
-type Mode = "text" | "form";
 type GolfTab = "times" | "players";
-
-const MODE_OPTIONS: { value: Mode; label: string }[] = [
-  { value: "text", label: "Kirjoita" },
-  { value: "form", label: "Valitse" },
-];
+// The natural-language client path remains available for a future return, but
+// the current Golf UI intentionally exposes only the structured form.
+const TEXT_SEARCH_ENABLED = false;
 
 interface ErrorBody {
   error?: string;
@@ -38,7 +35,6 @@ interface ErrorBody {
 
 export function GolfSearch() {
   const [tab, setTab] = useState<GolfTab>("times");
-  const [mode, setMode] = useState<Mode>("text");
   const [selectedClubs, setSelectedClubs] = useState<Set<string>>(new Set([DEFAULT_CLUB_ID]));
   const [selectedCourses, setSelectedCourses] = useState<Set<string>>(new Set());
   const [text, setText] = useState("");
@@ -173,9 +169,7 @@ export function GolfSearch() {
         onChange={setSelectedCourses}
       />
 
-      <SegmentedControl label="Hakutapa" value={mode} onChange={setMode} options={MODE_OPTIONS} />
-
-      {mode === "text" ? (
+      {TEXT_SEARCH_ENABLED ? (
         <div className="space-y-3">
           <form onSubmit={handleSubmit} className="flex gap-2">
             <Input
