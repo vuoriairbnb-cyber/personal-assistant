@@ -44,3 +44,15 @@ test("Aulanko Eversti is configured as one authenticated player-search course", 
   assert.deepEqual(playerSearchProducts(aulanko).map((group) => ({ productid: group.productid, courses: group.courses.map((course) => ({ id: course.id, resourceId: course.resourceId })) })), [{ productid: 7, courses: [{ id: "eversti", resourceId: 1 }] }]);
   assert.equal(parsePublicGolfPlayer({ ...publicPlayer, resourceId: "1" })?.resourceId, 1);
 });
+
+test("St. Laurence keeps Pyhä Lauri and Kalkki-Petteri as separate player-search products", () => {
+  const stLaurence = getClub("st-laurence")!;
+  assert.equal(stLaurence.domain, "api.stlg.fi");
+  assert.equal(stLaurence.playerSearch?.enabled, true);
+  assert.deepEqual(playerSearchProducts(stLaurence).map((group) => ({ productid: group.productid, courses: group.courses.map((course) => ({ id: course.id, resourceId: course.resourceId })) })), [
+    { productid: 7, courses: [{ id: "pyha-lauri", resourceId: 1 }] },
+    { productid: 8, courses: [{ id: "kalkki-petteri", resourceId: 2 }] },
+  ]);
+  assert.equal(parsePublicGolfPlayer({ ...publicPlayer, resourceId: "1" })?.resourceId, 1);
+  assert.equal(parsePublicGolfPlayer({ ...publicPlayer, resourceId: "2" })?.resourceId, 2);
+});

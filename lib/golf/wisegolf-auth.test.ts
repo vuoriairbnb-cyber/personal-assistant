@@ -18,9 +18,13 @@ test("WiseGolf player auth uses the exact lower-case token scheme and configured
   const aulanko = getClub("aulanko-golf")!;
   assert.equal(aulanko.playerSearch?.auth.envVar, "AULANKO_WISEGOLF_ACCESS_TOKEN");
   assert.deepEqual(authenticatedWiseGolfHeaders(aulanko, { AULANKO_WISEGOLF_ACCESS_TOKEN: "test-access-token" }), { Accept: "application/json", Authorization: "token test-access-token", "x-session-type": "wisegolf" });
+  const stLaurence = getClub("st-laurence")!;
+  assert.equal(stLaurence.playerSearch?.auth.envVar, "STLAURENCE_WISEGOLF_ACCESS_TOKEN");
+  assert.deepEqual(authenticatedWiseGolfHeaders(stLaurence, { STLAURENCE_WISEGOLF_ACCESS_TOKEN: "test-access-token" }), { Accept: "application/json", Authorization: "token test-access-token", "x-session-type": "wisegolf" });
 });
 
 test("missing WiseGolf token fails closed", () => {
   assert.throws(() => authenticatedWiseGolfHeaders(getClub("hgk")!, {}), WiseGolfAuthRequiredError);
   assert.throws(() => authenticatedWiseGolfHeaders(getClub("aulanko-golf")!, {}), WiseGolfAuthRequiredError);
+  assert.throws(() => authenticatedWiseGolfHeaders(getClub("st-laurence")!, {}), WiseGolfAuthRequiredError);
 });
