@@ -216,6 +216,17 @@ export const KLUBIT: GolfClub[] = [
     ],
   },
   {
+    id: "st-laurence",
+    nimi: "St. Laurence Golf",
+    domain: "api.stlg.fi",
+    aliases: ["st. laurence golf", "st laurence golf", "st. laurence", "st laurence", "stlg"],
+    bookingUrl: "https://stlg.fi",
+    kentat: [
+      { id: "pyha-lauri", nimi: "Pyhä Lauri", productid: 7, resourceId: 1, aliases: ["pyhä lauri", "pyha lauri"], horisonttiPaivia: 4, horisonttiAukeaa: "21:00", horisonttiCalendarista: true, paikkoja: 4, lahtovaliMin: 10, paivanAlku: "06:00", paivanLoppu: "23:00" },
+      { id: "kalkki-petteri", nimi: "Kalkki-Petteri", productid: 8, resourceId: 2, aliases: ["kalkki-petteri", "kalkki petteri"], horisonttiPaivia: 4, horisonttiAukeaa: "21:00", horisonttiCalendarista: true, paikkoja: 4, lahtovaliMin: 10, paivanAlku: "06:05", paivanLoppu: "23:05" },
+    ],
+  },
+  {
     id: "nordcenter",
     nimi: "Nordcenter",
     domain: "api.nordcenter.fi",

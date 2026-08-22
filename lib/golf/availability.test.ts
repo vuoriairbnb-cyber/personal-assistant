@@ -63,6 +63,16 @@ test("Nordcenter sums only the requested row.resources quantity", () => {
   assert.equal(availability(rows, 51, "18:00"), undefined);
 });
 
+test("calendar visibility rules override limitFutureReservations and preserve the Helsinki opening time", () => {
+  assert.deepEqual(
+    getCalendarVisibility([
+      { ruleName: "kalenteriNakyvyysPaivat", resourceId: 1, startDate: null, endDate: null, startTime: "00:00:00", endTime: "23:59:00", recurrenceDays: null, ruleValue: 4 },
+      { ruleName: "kalenteriNakyvyysAvaus", resourceId: 1, startDate: null, endDate: null, startTime: "00:00:00", endTime: "23:59:00", recurrenceDays: null, ruleValue: { localTime: "21:00" } },
+    ], date, 1, 3),
+    { days: 4, opensAt: "21:00" }
+  );
+});
+
 test("SHG resource rows remain isolated", () => {
   const rows = [row("08:00", 1), row("08:00", 1), row("08:00", 2)];
   assert.equal(availability(rows, 1, "08:00"), 2);

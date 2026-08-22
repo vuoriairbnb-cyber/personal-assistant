@@ -3,6 +3,20 @@ import test from "node:test";
 import { detectClub, detectCourse, getClub } from "./clubs.ts";
 
 const kytaja = getClub("kytaja");
+const stLaurence = getClub("st-laurence");
+
+test("St. Laurence courses are independent WiseGolf products", () => {
+  assert.ok(stLaurence);
+  assert.equal(stLaurence.domain, "api.stlg.fi");
+  assert.deepEqual(stLaurence.kentat.map(({ id, nimi, productid, resourceId, paikkoja, lahtovaliMin, paivanAlku, horisonttiCalendarista, horisonttiAukeaa }) => ({ id, nimi, productid, resourceId, paikkoja, lahtovaliMin, paivanAlku, horisonttiCalendarista, horisonttiAukeaa })), [
+    { id: "pyha-lauri", nimi: "Pyhä Lauri", productid: 7, resourceId: 1, paikkoja: 4, lahtovaliMin: 10, paivanAlku: "06:00", horisonttiCalendarista: true, horisonttiAukeaa: "21:00" },
+    { id: "kalkki-petteri", nimi: "Kalkki-Petteri", productid: 8, resourceId: 2, paikkoja: 4, lahtovaliMin: 10, paivanAlku: "06:05", horisonttiCalendarista: true, horisonttiAukeaa: "21:00" },
+  ]);
+  assert.equal(new Set(stLaurence.kentat.map((course) => course.productid)).size, 2);
+  assert.equal(detectClub("St. Laurence Golf")?.id, "st-laurence");
+  assert.equal(detectCourse("Pyhä Lauri", stLaurence)?.course.id, "pyha-lauri");
+  assert.equal(detectCourse("Kalkki Petteri", stLaurence)?.course.id, "kalkki-petteri");
+});
 
 test("Kytäjä club and course aliases resolve to the configured courses", () => {
   assert.ok(kytaja);
