@@ -7,6 +7,7 @@ import { Select } from "@/components/ui/Select";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { saveSettings } from "@/lib/actions/settings";
 import { signOut } from "@/lib/actions/auth";
+import { AiCostsSection } from "@/components/settings/AiCostsSection";
 
 export default async function SettingsPage() {
   const supabase = await createServerSupabaseClient();
@@ -75,6 +76,8 @@ export default async function SettingsPage() {
           </ButtonLink>
         </Card>
       )}
+
+      <AiCostsSection />
     </div>
   );
 }
