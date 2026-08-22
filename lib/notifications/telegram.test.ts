@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatGolfWatchTelegramMessage, TelegramConfigurationError, TelegramSender } from "./telegram.ts";
+import { TelegramConfigurationError, TelegramSender } from "./telegram.ts";
+import { formatGolfWatchTelegramMessage, formatPlayerWatchTelegramMessage } from "./telegram-message.ts";
 
 const event = { id: "event-1", eventType: "golf_watch_matched", sourceType: "golf_watch", sourceId: "watch-1", payload: { course: "Helsingin Golfklubi", date: "2026-08-17", time: "17:33", available_spots: 4, players: 2, time_from: "17:00", time_to: "19:00" } };
 
@@ -20,6 +21,29 @@ test("Telegram message includes every match and groups multiple times by course"
     { course: "Kullo Golf", date: "2026-08-17", time: "19:00", available_spots: 2 },
   ] });
   assert.match(text, /löysi aikoja/); assert.match(text, /18:36 — 4 paikkaa/); assert.match(text, /18:45 — 4 paikkaa/); assert.match(text, /Kullo Golf/);
+});
+
+test("player watch Telegram message uses the deterministic Finnish template", () => {
+  const text = formatPlayerWatchTelegramMessage({ player_name: "Elo Vartiainen", course: "Helsingin Golfklubi", date: "2026-08-22", time: "14:51" });
+  assert.equal(text, "👤 Pelaajavahti löysi uuden lähdön!\n\nElo Vartiainen\nHelsingin Golfklubi\n22.08.2026 klo 14.51\n\nPelaajavahti jatkaa seurantaa.");
+});
+
+test("TelegramSender sends player watch messages through the existing configured channel", async () => {
+  const originalFetch = globalThis.fetch;
+  const previousToken = process.env.TELEGRAM_BOT_TOKEN;
+  const previousChat = process.env.TELEGRAM_CHAT_ID;
+  process.env.TELEGRAM_BOT_TOKEN = "test-token";
+  process.env.TELEGRAM_CHAT_ID = "12345";
+  let body: Record<string, unknown> | undefined;
+  globalThis.fetch = async (_url, init) => { body = JSON.parse(String(init?.body)) as Record<string, unknown>; return new Response(JSON.stringify({ ok: true, result: { message_id: 456 } }), { status: 200 }); };
+  try {
+    await new TelegramSender().send({ id: "player-event", eventType: "player_watch_match", sourceType: "player_watch_match", sourceId: "match-1", payload: { player_name: "Elo Vartiainen", course: "Helsingin Golfklubi", date: "2026-08-22", time: "14:51" } });
+    assert.equal(body?.text, formatPlayerWatchTelegramMessage({ player_name: "Elo Vartiainen", course: "Helsingin Golfklubi", date: "2026-08-22", time: "14:51" }));
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousToken === undefined) delete process.env.TELEGRAM_BOT_TOKEN; else process.env.TELEGRAM_BOT_TOKEN = previousToken;
+    if (previousChat === undefined) delete process.env.TELEGRAM_CHAT_ID; else process.env.TELEGRAM_CHAT_ID = previousChat;
+  }
 });
 
 test("TelegramSender uses configured Bot API URL and chat ID", async () => {
