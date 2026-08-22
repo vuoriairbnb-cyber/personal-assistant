@@ -56,3 +56,14 @@ test("St. Laurence keeps Pyhä Lauri and Kalkki-Petteri as separate player-searc
   assert.equal(parsePublicGolfPlayer({ ...publicPlayer, resourceId: "1" })?.resourceId, 1);
   assert.equal(parsePublicGolfPlayer({ ...publicPlayer, resourceId: "2" })?.resourceId, 2);
 });
+
+test("SHG groups Luukki and Lakisto into one shared product fetch", () => {
+  const shg = getClub("shg")!;
+  assert.equal(shg.domain, "api.shg.fi");
+  assert.equal(shg.playerSearch?.enabled, true);
+  assert.deepEqual(playerSearchProducts(shg).map((group) => ({ productid: group.productid, courses: group.courses.map((course) => ({ id: course.id, resourceId: course.resourceId })) })), [
+    { productid: 53, courses: [{ id: "luukki", resourceId: 1 }, { id: "lakisto", resourceId: 2 }] },
+  ]);
+  assert.equal(parsePublicGolfPlayer({ ...publicPlayer, resourceId: "1" })?.resourceId, 1);
+  assert.equal(parsePublicGolfPlayer({ ...publicPlayer, resourceId: "2" })?.resourceId, 2);
+});

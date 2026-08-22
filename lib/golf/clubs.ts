@@ -295,6 +295,7 @@ export const KLUBIT: GolfClub[] = [
     domain: "api.shg.fi",
     aliases: ["suur-helsingin golf", "suur helsingin golfseura", "suur helsingin golf", "shg"],
     bookingUrl: "https://shg.fi",
+    playerSearch: { enabled: true, auth: { type: "wisegolf-access-token", envVar: "SHG_WISEGOLF_ACCESS_TOKEN", sessionType: "wisegolf" } },
     kentat: [
       {
         id: "luukki",
