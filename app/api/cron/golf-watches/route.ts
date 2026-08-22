@@ -1,11 +1,13 @@
 import type { NextRequest } from "next/server";
 import { processDueGolfWatches } from "@/lib/golf/watches";
+import { processDuePlayerWatches } from "@/lib/golf/player-watches";
 import { processPendingNotifications } from "@/lib/notifications/dispatcher";
 import { createGolfWatchCronHandler } from "@/lib/golf/cron-handler";
 
 const handleCron = createGolfWatchCronHandler({
   secret: process.env.CRON_SECRET,
   processWatches: processDueGolfWatches,
+  processPlayerWatches: processDuePlayerWatches,
   processNotifications: processPendingNotifications,
 });
 

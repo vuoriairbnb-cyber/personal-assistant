@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 
 export type GolfWatchCronSummary = { processed: number; matched: number; rescheduled: number; expired: number; failed: number };
 export type NotificationSummary = { attempted: number; sent: number; failed: number };
+export type PlayerWatchCronSummary = { processed: number; newMatches: number; failed: number };
 type Logger = Pick<Console, "info" | "error">;
 
 function hashPrefix(value: string | null) {
@@ -36,6 +37,7 @@ function authorized(request: Request, rawSecret: string | undefined, logger: Log
 export function createGolfWatchCronHandler(deps: {
   secret: string | undefined;
   processWatches: () => Promise<GolfWatchCronSummary>;
+  processPlayerWatches?: () => Promise<PlayerWatchCronSummary>;
   processNotifications: () => Promise<NotificationSummary>;
   logger?: Logger;
   now?: () => number;
@@ -48,10 +50,11 @@ export function createGolfWatchCronHandler(deps: {
     logger.info("[golf-watch] cron started");
     try {
       const summary = await deps.processWatches();
+      const playerWatches = await (deps.processPlayerWatches?.() ?? Promise.resolve({ processed: 0, newMatches: 0, failed: 0 }));
       const notifications = await deps.processNotifications();
       const durationMs = now() - startedAt;
       logger.info("[golf-watch] cron complete", { ...summary, durationMs });
-      return Response.json({ ok: true, ...summary, notifications, duration_ms: durationMs });
+      return Response.json({ ok: true, ...summary, player_watches: playerWatches, notifications, duration_ms: durationMs });
     } catch (error) {
       const durationMs = now() - startedAt;
       logger.error("[golf-watch] cron failed", { error: { name: error instanceof Error ? error.name : "Error", message: "cron processing unavailable" }, durationMs });

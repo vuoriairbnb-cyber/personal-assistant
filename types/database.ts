@@ -338,6 +338,16 @@ export type Database = {
         Update: { status?: string; processed_at?: string | null; channel?: string | null; delivery_attempts?: number; last_error?: string | null; processing_started_at?: string | null; provider_message_id?: string | null; [key: string]: unknown; };
         Relationships: [];
       };
+      player_watches: {
+        Row: { id: string; user_id: string; player_name: string; player_name_normalized: string; courses: string[]; search_all_supported: boolean; date_from: string; date_to: string; status: "active" | "processing" | "expired" | "cancelled"; consent_status: string; consent_reference: string | null; consented_at: string | null; created_at: string; updated_at: string; last_checked_at: string | null; next_check_at: string | null; expires_at: string; processing_started_at: string | null; [key: string]: unknown; };
+        Insert: { id?: string; user_id: string; player_name: string; player_name_normalized: string; courses: string[]; search_all_supported?: boolean; date_from: string; date_to: string; status?: "active" | "processing" | "expired" | "cancelled"; consent_status?: string; consent_reference?: string | null; consented_at?: string | null; expires_at: string; last_checked_at?: string | null; next_check_at?: string | null; processing_started_at?: string | null; [key: string]: unknown; };
+        Update: { status?: "active" | "processing" | "expired" | "cancelled"; last_checked_at?: string | null; next_check_at?: string | null; processing_started_at?: string | null; [key: string]: unknown; }; Relationships: [];
+      };
+      player_watch_matches: {
+        Row: { id: string; watch_id: string; course: string; date: string; tee_time: string; player_name: string; player_name_normalized: string; first_seen_at: string; notified_at: string | null; [key: string]: unknown; };
+        Insert: { id?: string; watch_id: string; course: string; date: string; tee_time: string; player_name: string; player_name_normalized: string; notified_at?: string | null; [key: string]: unknown; };
+        Update: { notified_at?: string | null; [key: string]: unknown; }; Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -348,6 +358,8 @@ export type Database = {
       claim_due_golf_watches: { Args: { p_limit?: number }; Returns: Database["public"]["Tables"]["golf_watches"]["Row"][] };
       complete_golf_watch_match: { Args: { p_watch_id: string; p_course: string; p_time: string; p_available_spots: number; p_payload: Record<string, unknown> }; Returns: boolean };
       claim_pending_notification_outbox: { Args: { p_limit?: number }; Returns: Database["public"]["Tables"]["notification_outbox"]["Row"][] };
+      claim_due_player_watches: { Args: { p_limit?: number }; Returns: Database["public"]["Tables"]["player_watches"]["Row"][] };
+      record_player_watch_match: { Args: { p_watch_id: string; p_course: string; p_date: string; p_time: string; p_player_name: string; p_player_name_normalized: string }; Returns: string | null };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
