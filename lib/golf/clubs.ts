@@ -221,6 +221,7 @@ export const KLUBIT: GolfClub[] = [
     domain: "api.aulankogolf.fi",
     aliases: ["aulanko golf", "aulanko"],
     bookingUrl: "https://aulankogolf.fi",
+    playerSearch: { enabled: true, auth: { type: "wisegolf-access-token", envVar: "AULANKO_WISEGOLF_ACCESS_TOKEN", sessionType: "wisegolf" } },
     kentat: [
       {
         id: "eversti",

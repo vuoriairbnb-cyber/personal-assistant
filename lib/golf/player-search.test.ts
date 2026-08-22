@@ -36,3 +36,11 @@ test("Nordcenter shares one product fetch and splits numeric resource IDs by cou
   assert.equal(parsePublicGolfPlayer({ ...publicPlayer, resourceId: "49" })?.resourceId, 49);
   assert.equal(parsePublicGolfPlayer({ ...publicPlayer, resourceId: "51" })?.resourceId, 51);
 });
+
+test("Aulanko Eversti is configured as one authenticated player-search course", () => {
+  const aulanko = getClub("aulanko-golf")!;
+  assert.equal(aulanko.domain, "api.aulankogolf.fi");
+  assert.equal(aulanko.playerSearch?.enabled, true);
+  assert.deepEqual(playerSearchProducts(aulanko).map((group) => ({ productid: group.productid, courses: group.courses.map((course) => ({ id: course.id, resourceId: course.resourceId })) })), [{ productid: 7, courses: [{ id: "eversti", resourceId: 1 }] }]);
+  assert.equal(parsePublicGolfPlayer({ ...publicPlayer, resourceId: "1" })?.resourceId, 1);
+});

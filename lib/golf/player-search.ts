@@ -14,7 +14,7 @@ export { matchesPublicGolfPlayer, parsePublicGolfPlayer, type PublicGolfPlayer }
 export { validatePlayerSearchRequest } from "./player-search-request.ts";
 
 function courseForPlayer(courses: GolfCourse[], resourceId?: number): GolfCourse | null {
-  if (resourceId !== undefined) return courses.find((course) => course.resourceId === resourceId) ?? (courses.length === 1 ? courses[0]! : null);
+  if (resourceId !== undefined) return courses.find((course) => Number(course.resourceId) === Number(resourceId)) ?? (courses.length === 1 ? courses[0]! : null);
   return courses.length === 1 ? courses[0]! : null;
 }
 
