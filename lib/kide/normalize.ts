@@ -1,4 +1,4 @@
-import type { KideEvent, KideVariant } from "./types.ts";
+import type { KideEvent, KideReservation, KideReservationResult, KideVariant } from "./types.ts";
 
 function record(value: unknown): Record<string, unknown> | null { return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null; }
 function string(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }
@@ -37,5 +37,29 @@ export function normalizeKideEvent(value: unknown): KideEvent {
     timeUntilSalesStart: number(product.timeUntilSalesStart), availability: number(product.availability), hasReservations: typeof product.hasReservations === "boolean" ? product.hasReservations : null,
     hasInventoryItems: typeof product.hasInventoryItems === "boolean" ? product.hasInventoryItems : null,
     hasFreeInventoryItems: typeof product.hasFreeInventoryItems === "boolean" ? product.hasFreeInventoryItems : null, variants,
+  };
+}
+
+function normalizeReservation(value: unknown): KideReservation | null {
+  const reservation = record(value);
+  const inventoryId = string(reservation?.inventoryId);
+  if (!reservation || !inventoryId) return null;
+  return {
+    inventoryId, variantId: string(reservation.variantId), variantName: string(reservation.variantName), productId: string(reservation.productId), productName: string(reservation.productName),
+    reservedQuantity: number(reservation.reservedQuantity) ?? 0, reservationDateCreated: string(reservation.reservationDateCreated), pricePerItem: number(reservation.pricePerItem),
+    currencyCode: string(reservation.currencyCode), availability: number(reservation.availability), hakaRequired: boolean(reservation.isProductVariantHakaAuthenticationRequired),
+    maxReservable: number(reservation.productVariantMaximumReservableQuantity), maxPerUser: number(reservation.productVariantMaximumItemQuantityPerUser),
+  };
+}
+
+export function normalizeKideReservationResult(value: unknown): KideReservationResult {
+  const root = record(value); const model = record(root?.model);
+  if (!model) throw new Error("Kide returned an invalid reservation response");
+  const reservations = Array.isArray(model.reservations) ? model.reservations.flatMap((reservation) => {
+    const normalized = normalizeReservation(reservation); return normalized ? [normalized] : [];
+  }) : [];
+  return {
+    reservationsPrice: number(model.reservationsPrice), deliveryMethodsPrice: number(model.deliveryMethodsPrice), serviceFee: number(model.serviceFee), finalPrice: number(model.finalPrice), currencyCode: string(model.currencyCode),
+    reservationsCount: number(model.reservationsCount) ?? reservations.length, reservationsTimeLeft: number(model.reservationsTimeLeft), reservations,
   };
 }
