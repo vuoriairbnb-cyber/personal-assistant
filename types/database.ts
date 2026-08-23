@@ -348,6 +348,21 @@ export type Database = {
         Insert: { id?: string; watch_id: string; course: string; date: string; tee_time: string; player_name: string; player_name_normalized: string; notified_at?: string | null; [key: string]: unknown; };
         Update: { notified_at?: string | null; [key: string]: unknown; }; Relationships: [];
       };
+      kide_agent_devices: {
+        Row: { id: string; user_id: string; name: string; token_hash: string; created_at: string; last_seen_at: string | null; revoked_at: string | null; [key: string]: unknown; };
+        Insert: { id?: string; user_id: string; name: string; token_hash: string; last_seen_at?: string | null; revoked_at?: string | null; [key: string]: unknown; };
+        Update: { name?: string; last_seen_at?: string | null; revoked_at?: string | null; [key: string]: unknown; }; Relationships: [];
+      };
+      kide_agent_pairings: {
+        Row: { id: string; user_id: string; pairing_code_hash: string; expires_at: string; used_at: string | null; created_at: string; [key: string]: unknown; };
+        Insert: { id?: string; user_id: string; pairing_code_hash: string; expires_at: string; used_at?: string | null; [key: string]: unknown; };
+        Update: { used_at?: string | null; expires_at?: string; [key: string]: unknown; }; Relationships: [];
+      };
+      kide_watches: {
+        Row: { id: string; user_id: string; event_id: string; event_url: string | null; event_name: string | null; target_mode: string; exact_variant_name: string | null; max_price_cents: number | null; quantity: number; sale_start_at: string; expires_at: string; status: string; armed_at: string | null; disarmed_at: string | null; reservation_attempted: boolean; selected_variant_name: string | null; selected_price_cents: number | null; last_agent_update_at: string | null; safe_error: string | null; created_at: string; updated_at: string; [key: string]: unknown; };
+        Insert: { id?: string; user_id: string; event_id: string; event_url?: string | null; event_name?: string | null; target_mode: string; exact_variant_name?: string | null; max_price_cents?: number | null; quantity?: number; sale_start_at: string; expires_at: string; status?: string; armed_at?: string | null; disarmed_at?: string | null; reservation_attempted?: boolean; selected_variant_name?: string | null; selected_price_cents?: number | null; last_agent_update_at?: string | null; safe_error?: string | null; [key: string]: unknown; };
+        Update: { event_url?: string | null; event_name?: string | null; target_mode?: string; exact_variant_name?: string | null; max_price_cents?: number | null; sale_start_at?: string; expires_at?: string; status?: string; armed_at?: string | null; disarmed_at?: string | null; reservation_attempted?: boolean; selected_variant_name?: string | null; selected_price_cents?: number | null; last_agent_update_at?: string | null; safe_error?: string | null; updated_at?: string; [key: string]: unknown; }; Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -360,6 +375,7 @@ export type Database = {
       claim_pending_notification_outbox: { Args: { p_limit?: number }; Returns: Database["public"]["Tables"]["notification_outbox"]["Row"][] };
       claim_due_player_watches: { Args: { p_limit?: number }; Returns: Database["public"]["Tables"]["player_watches"]["Row"][] };
       record_player_watch_match: { Args: { p_watch_id: string; p_course: string; p_date: string; p_time: string; p_player_name: string; p_player_name_normalized: string }; Returns: string | null };
+      consume_kide_agent_pairing: { Args: { p_pairing_code_hash: string }; Returns: string | null };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

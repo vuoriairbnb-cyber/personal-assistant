@@ -5,6 +5,8 @@
   "description": "Local-only proof of concept for one manually confirmed Kide UI reservation.",
   "permissions": ["storage", "activeTab"],
   "host_permissions": ["https://kide.app/*", "https://www.kide.app/*"],
+  "optional_host_permissions": ["https://*/*", "http://localhost/*"],
+  "background": { "service_worker": "background.js" },
   "action": { "default_popup": "popup.html", "default_title": "Kide reservation POC" },
   "content_scripts": [
     {

@@ -5,6 +5,9 @@
   const SOLD_OUT = /sold out|loppuunmyyty|unavailable|ei saatavilla/i;
   const RESERVATION_UI = /active cart|reservation|reserved|cart|basket|ostoskori|varattu|varaus|minuuttia jäljellä|minutes? remaining/i;
   let armedTarget = null; let observer = null; let wakeTimer = null; let reloadTimer = null; let attemptLock = false;
+  let agentSyncTimer = null; let lastReportedAgentStatus = null;
+  function agentRequest(type, payload) { return new Promise((resolve, reject) => chrome.runtime.sendMessage({ type, payload }, (response) => { if (chrome.runtime.lastError) return reject(chrome.runtime.lastError); if (!response?.ok) return reject(new Error(response?.error || "Agent request failed.")); resolve(response.data); })); }
+  function reportAgentStatus(watch, status) { if (!watch.serverWatchId || lastReportedAgentStatus === status) return; lastReportedAgentStatus = status; void agentRequest("KIDE_AGENT_STATUS", { watchId: watch.serverWatchId, status, selectedVariantName: watch.selectedVariantName, selectedPriceCents: watch.selectedPriceCents }).catch(() => { lastReportedAgentStatus = null; }); }
 
   function visible(element) { const style = window.getComputedStyle(element); return style.display !== "none" && style.visibility !== "hidden" && element.getClientRects().length > 0; }
   function visibleText(element) { return visible(element) ? helpers.normalizeWhitespace(element.innerText || element.textContent) : ""; }
@@ -34,7 +37,7 @@
   function clearWatchRuntime() { observer?.disconnect(); observer = null; clearTimeout(wakeTimer); clearTimeout(reloadTimer); wakeTimer = null; reloadTimer = null; }
   async function readWatch() { return (await chrome.storage.local.get(WATCH_KEY))[WATCH_KEY] ?? null; }
   async function writeWatch(watch) { await chrome.storage.local.set({ [WATCH_KEY]: watch }); return watch; }
-  async function terminal(watch, terminalResult, message) { clearWatchRuntime(); return writeWatch({ ...watch, armed: false, terminalResult, status: terminalResult, message, completedAt: Date.now() }); }
+  async function terminal(watch, terminalResult, message) { clearWatchRuntime(); const next = await writeWatch({ ...watch, armed: false, terminalResult, status: terminalResult, message, completedAt: Date.now() }); reportAgentStatus(next, terminalResult); return next; }
   function showIndicator(watch, status) { let badge = document.querySelector("#kide-auto-reserve-indicator"); if (!watch.armed) return badge?.remove(); if (!badge) { badge = document.createElement("div"); badge.id = "kide-auto-reserve-indicator"; badge.style.cssText = "position:fixed;right:12px;bottom:12px;z-index:2147483647;padding:8px 10px;border-radius:6px;background:#3f2c88;color:#fff;font:12px system-ui;box-shadow:0 2px 10px #0004;pointer-events:none"; document.body.append(badge); } const target = watch.targetMode === "first_available_under_price" ? `first under ${(watch.maxPriceCents / 100).toFixed(2)} €` : watch.exactVariantName; badge.textContent = `KIDE AUTO RESERVE ARMED · ${target} · ${status}`; }
 
   async function locateTarget({ eventId, variantName }) {
@@ -65,7 +68,7 @@
     const exactVariant = watch.targetMode === "first_available_under_price" ? null : findExactVariantElement(watch.exactVariantName ?? watch.variantName);
     const candidate = watch.targetMode === "first_available_under_price" ? firstEligibleCandidateUnderPrice(watch.maxPriceCents) : exactVariant ? { control: findReservationButtonForVariant(exactVariant), variantName: watch.exactVariantName ?? watch.variantName, priceCents: null } : null;
     const status = helpers.autoWatchState(watch, now, verificationRequired(), Boolean(candidate?.control));
-    showIndicator(watch, status);
+    showIndicator(watch, status); reportAgentStatus(watch, status);
     if (status === "WATCH_EXPIRED" || status === "VERIFICATION_REQUIRED") return terminal(watch, status, status === "WATCH_EXPIRED" ? "The bounded auto-reservation watch expired." : "Kide requires normal manual verification. No reservation was clicked.");
     if (watch.reservationAttempted) return terminal(watch, "RESERVATION_RESULT_UNKNOWN", "A reservation attempt was already recorded. The extension will never click again for this arm.");
     if (status === "WAITING_FOR_SALE") {
@@ -81,6 +84,7 @@
     if (!control) { await writeWatch({ ...watch, status: "WAITING_FOR_VARIANT" }); clearTimeout(reloadTimer); reloadTimer = window.setTimeout(() => location.reload(), 4_000); return; }
     const marked = await markAttempted(watch);
     if (!marked) return;
+    reportAgentStatus(marked, "attempting");
     clearWatchRuntime();
     const attempted = { ...marked, selectedVariantName: candidate.variantName, selectedPriceCents: candidate.priceCents };
     await writeWatch(attempted); const before = reservationSignal(); control.click();
@@ -90,7 +94,11 @@
   }
 
   async function resumeAutoWatch() { attemptLock = false; await inspectAutoWatch(); }
+  async function syncAgentWatch() {
+    try { const response = await agentRequest("KIDE_AGENT_GET_WATCH"); await agentRequest("KIDE_AGENT_HEARTBEAT"); const server = response.watch; const local = await readWatch(); if (!server) { if (local?.serverWatchId && local.armed) await terminal(local, "disarmed", "Watch disarmed from Personal Assistant."); return; } if (local?.reservationAttempted && Date.parse(local.serverUpdatedAt ?? "") >= Date.parse(server.updatedAt)) return; lastReportedAgentStatus = null; const imported = { ...(local ?? {}), serverWatchId: server.id, serverUpdatedAt: server.updatedAt, armed: true, eventId: server.eventId, eventUrl: server.eventUrl ?? `https://kide.app/events/${server.eventId}`, targetMode: server.targetMode, exactVariantName: server.exactVariantName, maxPriceCents: server.maxPriceCents, quantity: server.quantity, saleStart: Date.parse(server.saleStartAt), expiresAt: Date.parse(server.expiresAt), reservationAttempted: server.reservationAttempted, status: server.status }; await writeWatch(imported); await resumeAutoWatch(); } catch {}
+  }
   void resumeAutoWatch();
+  void syncAgentWatch(); agentSyncTimer = window.setInterval(() => void syncAgentWatch(), 15_000);
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!message || !["FIND_TICKET", "ARM_RESERVATION", "CREATE_RESERVATION", "ARM_AUTO_RESERVATION", "DISARM_AUTO_RESERVATION", "GET_AUTO_RESERVATION"].includes(message.type)) return;
