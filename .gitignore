@@ -36,3 +36,6 @@ next-env.d.ts
 
 # local tooling state
 .claude/
+
+# sensitive local Kide browser session profile (cookies and authenticated state)
+/.local/kide-playwright-profile/

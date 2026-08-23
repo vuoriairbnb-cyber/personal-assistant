@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Kide Reservation POC",
+  "version": "0.1.0",
+  "description": "Local-only proof of concept for one manually confirmed Kide UI reservation.",
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": ["https://kide.app/*", "https://www.kide.app/*"],
+  "action": { "default_popup": "popup.html", "default_title": "Kide reservation POC" },
+  "content_scripts": [
+    {
+      "matches": ["https://kide.app/*", "https://www.kide.app/*"],
+      "js": ["helpers.js", "content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
