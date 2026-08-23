@@ -20,4 +20,8 @@ This is a local, unpacked Manifest V3 extension. It only operates on normal `kid
 
 If Kide shows Cloudflare, CAPTCHA, login, Haka, membership, student-verification, or access-denied text, the extension returns `VERIFICATION_REQUIRED` and does not click anything. Complete the normal Kide step manually and start again.
 
+## Auto reserve
+
+The separate **Auto reserve** section is an explicitly armed one-ticket watcher. Enter the known local sale start and a bounded timeout (default 10 minutes), or choose **Start watching now** for an already-on-sale manual smoke test. Review the resolved local time, then confirm **ARM AUTO RESERVATION**. From that point, normal Chrome must stay open on Kide. The extension remains idle before sale start, then observes the DOM and uses a bounded 4-second normal page reload fallback only after the sale starts. It persists only the event/variant/timing/attempt state in extension storage, disarms at expiry or any terminal result, and can make at most one Kide UI click per arm. **DISARM** stops the watcher but never cancels an existing Kide cart reservation.
+
 The selector strategy is deliberately isolated in `content.js`: exact visible variant text, then a semantic local container, then a visible enabled button with a reservation/add-to-cart label. If Kide changes its DOM, update only that helper logic after review.

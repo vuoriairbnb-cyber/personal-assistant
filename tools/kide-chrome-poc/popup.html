@@ -9,6 +9,8 @@
       <p id="status" role="status">Local-only. No reservation is made until final confirmation.</p>
       <div id="actions"><button id="find" type="button">Find ticket</button><button id="arm" type="button" disabled>Arm reservation</button></div>
       <section id="confirm" hidden><h2>READY</h2><p id="summary"></p><p>This will create a real temporary Kide reservation. No payment will be made.</p><div><button id="cancel" type="button">Cancel</button><button id="create" type="button" class="danger">Create real reservation</button></div></section>
+      <section id="auto"><h2>Auto reserve</h2><label>Sale start (local time)<input id="sale-start" type="datetime-local"></label><label>Watch timeout, minutes<input id="timeout" type="number" min="1" max="60" value="10"></label><label class="check"><input id="start-now" type="checkbox"> Start watching now</label><p id="auto-status">NOT ARMED</p><button id="prepare-auto" type="button">Prepare auto reservation</button><button id="disarm-auto" type="button" hidden>DISARM</button></section>
+      <section id="auto-confirm" hidden><h2>Automatic reservation</h2><p id="auto-summary"></p><p>When armed, this extension will automatically click Kide's reservation control once when the exact ticket becomes available. This creates a real temporary reservation. No payment will be made.</p><div><button id="cancel-auto" type="button">Cancel</button><button id="arm-auto" type="button" class="danger">ARM AUTO RESERVATION</button></div></section>
     </main>
     <script src="helpers.js"></script><script src="popup.js"></script>
   </body>

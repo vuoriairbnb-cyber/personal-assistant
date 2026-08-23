@@ -39,5 +39,25 @@
     return state === "READY";
   }
 
-  globalThis.KideChromePoc = Object.freeze({ normalizeWhitespace, exactVariantMatch, parseEventInput, pageEventId, pageHasChallenge, isKideReservationControl, canCreateReservation });
+  function parseLocalSaleStart(value) {
+    const match = /^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2})$/.exec(normalizeWhitespace(value));
+    if (!match) return null;
+    const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]));
+    return date.getFullYear() === Number(match[1]) && date.getMonth() === Number(match[2]) - 1 && date.getDate() === Number(match[3]) && date.getHours() === Number(match[4]) ? date.getTime() : null;
+  }
+
+  function calculateWatchExpiry(saleStart, timeoutMinutes) {
+    return saleStart + timeoutMinutes * 60_000;
+  }
+
+  function autoWatchState(watch, now, challenge, variantFound) {
+    if (!watch.armed) return watch.terminalResult || "NOT_ARMED";
+    if (now >= watch.expiresAt) return "WATCH_EXPIRED";
+    if (challenge) return "VERIFICATION_REQUIRED";
+    if (watch.reservationAttempted) return "RESERVATION_RESULT_UNKNOWN";
+    if (now < watch.saleStart) return "WAITING_FOR_SALE";
+    return variantFound ? "READY_TO_ATTEMPT" : "WAITING_FOR_VARIANT";
+  }
+
+  globalThis.KideChromePoc = Object.freeze({ normalizeWhitespace, exactVariantMatch, parseEventInput, pageEventId, pageHasChallenge, isKideReservationControl, canCreateReservation, parseLocalSaleStart, calculateWatchExpiry, autoWatchState });
 })();

@@ -32,3 +32,13 @@ test("recognizes the local O-ITEM reservation control but never the membership c
 test("allows a real reservation click only from the ready state", async () => {
   const poc = await helpers(); assert.equal(poc.canCreateReservation("READY"), true); assert.equal(poc.canCreateReservation("FOUND"), false); assert.equal(poc.canCreateReservation("VERIFICATION_REQUIRED"), false);
 });
+
+test("parses local sale time and calculates a bounded watch expiry", async () => {
+  const poc = await helpers(); const saleStart = poc.parseLocalSaleStart("2026-08-24T12:00");
+  assert.ok(saleStart); assert.equal(poc.calculateWatchExpiry(saleStart, 10) - saleStart, 600_000); assert.equal(poc.parseLocalSaleStart("2026-99-99T12:00"), null);
+});
+
+test("maps automatic watch states without allowing a second attempt", async () => {
+  const poc = await helpers(); const now = 1_000_000; const base = { armed: true, saleStart: now + 1_000, expiresAt: now + 10_000, reservationAttempted: false };
+  assert.equal(poc.autoWatchState(base, now, false, false), "WAITING_FOR_SALE"); assert.equal(poc.autoWatchState({ ...base, saleStart: now - 1 }, now, false, false), "WAITING_FOR_VARIANT"); assert.equal(poc.autoWatchState({ ...base, saleStart: now - 1 }, now, false, true), "READY_TO_ATTEMPT"); assert.equal(poc.autoWatchState({ ...base, saleStart: now - 1, reservationAttempted: true }, now, false, true), "RESERVATION_RESULT_UNKNOWN"); assert.equal(poc.autoWatchState({ ...base, expiresAt: now }, now, false, true), "WATCH_EXPIRED"); assert.equal(poc.autoWatchState(base, now, true, false), "VERIFICATION_REQUIRED");
+});

@@ -1,35 +1,22 @@
 (() => {
-  const { parseEventInput, normalizeWhitespace, canCreateReservation } = globalThis.KideChromePoc;
+  const { parseEventInput, normalizeWhitespace, canCreateReservation, parseLocalSaleStart, calculateWatchExpiry } = globalThis.KideChromePoc;
   const eventInput = document.querySelector("#event"); const variantInput = document.querySelector("#variant"); const status = document.querySelector("#status"); const find = document.querySelector("#find"); const arm = document.querySelector("#arm"); const confirm = document.querySelector("#confirm"); const summary = document.querySelector("#summary");
-  let target = null;
-
+  const saleStartInput = document.querySelector("#sale-start"); const timeoutInput = document.querySelector("#timeout"); const startNow = document.querySelector("#start-now"); const autoStatus = document.querySelector("#auto-status"); const prepareAuto = document.querySelector("#prepare-auto"); const disarmAuto = document.querySelector("#disarm-auto"); const autoConfirm = document.querySelector("#auto-confirm"); const autoSummary = document.querySelector("#auto-summary");
+  let target = null; let preparedAuto = null;
   async function activeTab() { const [tab] = await chrome.tabs.query({ active: true, currentWindow: true }); return tab; }
-  function show(message) { status.textContent = message; }
-  function clearConfirmation() { confirm.hidden = true; arm.disabled = !target; }
-  function readTarget() {
-    const event = parseEventInput(eventInput.value); const variantName = normalizeWhitespace(variantInput.value);
-    if (!event || !variantName) { show("Enter a valid Kide event URL/UUID and exact variant name."); return null; }
-    return { ...event, variantName };
-  }
+  function show(message) { status.textContent = message; } function clearConfirmation() { confirm.hidden = true; arm.disabled = !target; } function formatLocal(timestamp) { return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(timestamp)); }
+  function readTarget() { const event = parseEventInput(eventInput.value); const variantName = normalizeWhitespace(variantInput.value); if (!event || !variantName) { show("Enter a valid Kide event URL/UUID and exact variant name."); return null; } return { ...event, variantName }; }
   async function messageTab(type, payload) { const tab = await activeTab(); if (!tab?.id) throw new Error("No active tab."); return chrome.tabs.sendMessage(tab.id, { type, payload }); }
-  async function findTicket() {
-    const nextTarget = readTarget(); if (!nextTarget) return; target = nextTarget; clearConfirmation();
-    await chrome.storage.local.set({ kideChromePocTarget: target });
-    const tab = await activeTab();
-    if (!tab?.url || parseEventInput(tab.url)?.eventId !== target.eventId) { await chrome.tabs.update(tab.id, { url: target.eventUrl }); show("Navigated to the Kide event. Reopen the extension after Kide has rendered, then choose Find ticket."); return; }
-    const response = await messageTab("FIND_TICKET", target); show(response.message); arm.disabled = response.state !== "FOUND";
-  }
-  async function armReservation() {
-    if (!target) return; const response = await messageTab("ARM_RESERVATION", target); show(response.message);
-    if (canCreateReservation(response.state)) { summary.textContent = `Event: ${response.eventName}\nVariant: ${response.variantName}`; confirm.hidden = false; arm.disabled = true; }
-  }
-  async function createReservation() {
-    if (!target) return; document.querySelector("#create").disabled = true;
-    const response = await messageTab("CREATE_RESERVATION", target); show(response.message); confirm.hidden = true; target = null; arm.disabled = true;
-  }
-  find.addEventListener("click", () => findTicket().catch(() => show("Could not communicate with this Kide tab. Reload it normally and try again.")));
-  arm.addEventListener("click", () => armReservation().catch(() => show("Could not arm this Kide ticket.")));
-  document.querySelector("#cancel").addEventListener("click", () => { clearConfirmation(); show("Reservation cancelled before any Kide UI click."); });
-  document.querySelector("#create").addEventListener("click", () => createReservation().catch(() => show("The reservation attempt could not be completed.")));
-  chrome.storage.local.get("kideChromePocTarget").then(({ kideChromePocTarget }) => { if (!kideChromePocTarget) return; eventInput.value = kideChromePocTarget.eventUrl; variantInput.value = kideChromePocTarget.variantName; });
+  async function ensureEvent(nextTarget) { const tab = await activeTab(); if (!tab?.url || parseEventInput(tab.url)?.eventId !== nextTarget.eventId) { await chrome.tabs.update(tab.id, { url: nextTarget.eventUrl }); show("Navigated to the Kide event. Reopen the extension after Kide has rendered."); return false; } return true; }
+  async function findTicket() { const nextTarget = readTarget(); if (!nextTarget) return; target = nextTarget; clearConfirmation(); await chrome.storage.local.set({ kideChromePocTarget: target }); if (!await ensureEvent(target)) return; const response = await messageTab("FIND_TICKET", target); show(response.message); arm.disabled = response.state !== "FOUND"; }
+  async function armReservation() { if (!target) return; const response = await messageTab("ARM_RESERVATION", target); show(response.message); if (canCreateReservation(response.state)) { summary.textContent = `Event: ${response.eventName}\nVariant: ${response.variantName}`; confirm.hidden = false; arm.disabled = true; } }
+  async function createReservation() { if (!target) return; document.querySelector("#create").disabled = true; const response = await messageTab("CREATE_RESERVATION", target); show(response.message); confirm.hidden = true; target = null; arm.disabled = true; }
+  function readAutoWatch() { const nextTarget = readTarget(); if (!nextTarget) return null; const timeoutMinutes = Number(timeoutInput.value); const saleStart = startNow.checked ? Date.now() : parseLocalSaleStart(saleStartInput.value); if (!saleStart || !Number.isInteger(timeoutMinutes) || timeoutMinutes < 1 || timeoutMinutes > 60) { autoStatus.textContent = "Enter a valid local sale start and a timeout between 1 and 60 minutes."; return null; } return { ...nextTarget, saleStart, expiresAt: calculateWatchExpiry(saleStart, timeoutMinutes), timeoutMinutes }; }
+  async function prepareAutoReservation() { const watch = readAutoWatch(); if (!watch) return; if (!await ensureEvent(watch)) return; preparedAuto = watch; autoSummary.textContent = `Event: ${watch.eventId}\nTarget ticket: ${watch.variantName}\nSale starts: ${formatLocal(watch.saleStart)} local time\nWatch expires: ${formatLocal(watch.expiresAt)}`; autoConfirm.hidden = false; }
+  async function armAutoReservation() { if (!preparedAuto) return; const response = await messageTab("ARM_AUTO_RESERVATION", preparedAuto); autoConfirm.hidden = true; preparedAuto = null; autoStatus.textContent = `${response.state}\n${response.message}`; disarmAuto.hidden = response.state !== "ARMED"; }
+  async function disarmAutoReservation() { const response = await messageTab("DISARM_AUTO_RESERVATION"); autoStatus.textContent = `${response.state}\n${response.message}`; disarmAuto.hidden = true; }
+  async function restoreAutoStatus() { try { const response = await messageTab("GET_AUTO_RESERVATION"); const watch = response.watch; if (!watch) return; autoStatus.textContent = `${watch.status || (watch.armed ? "ARMED" : "NOT ARMED")}\nTarget: ${watch.variantName}\nExpires: ${formatLocal(watch.expiresAt)}`; disarmAuto.hidden = !watch.armed; } catch { autoStatus.textContent = "Open a Kide event tab to view auto-reservation status."; } }
+  find.addEventListener("click", () => findTicket().catch(() => show("Could not communicate with this Kide tab. Reload it normally and try again."))); arm.addEventListener("click", () => armReservation().catch(() => show("Could not arm this Kide ticket."))); document.querySelector("#cancel").addEventListener("click", () => { clearConfirmation(); show("Reservation cancelled before any Kide UI click."); }); document.querySelector("#create").addEventListener("click", () => createReservation().catch(() => show("The reservation attempt could not be completed.")));
+  prepareAuto.addEventListener("click", () => prepareAutoReservation().catch(() => { autoStatus.textContent = "Could not prepare the automatic reservation."; })); document.querySelector("#cancel-auto").addEventListener("click", () => { autoConfirm.hidden = true; preparedAuto = null; }); document.querySelector("#arm-auto").addEventListener("click", () => armAutoReservation().catch(() => { autoStatus.textContent = "Could not arm automatic reservation."; })); disarmAuto.addEventListener("click", () => disarmAutoReservation().catch(() => { autoStatus.textContent = "Could not disarm automatic reservation."; }));
+  chrome.storage.local.get("kideChromePocTarget").then(({ kideChromePocTarget }) => { if (!kideChromePocTarget) return; eventInput.value = kideChromePocTarget.eventUrl; variantInput.value = kideChromePocTarget.variantName; }); restoreAutoStatus();
 })();
