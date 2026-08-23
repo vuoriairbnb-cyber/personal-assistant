@@ -59,5 +59,40 @@
     return variantFound ? "READY_TO_ATTEMPT" : "WAITING_FOR_VARIANT";
   }
 
-  globalThis.KideChromePoc = Object.freeze({ normalizeWhitespace, exactVariantMatch, parseEventInput, pageEventId, pageHasChallenge, isKideReservationControl, canCreateReservation, parseLocalSaleStart, calculateWatchExpiry, autoWatchState });
+  function parseEuroCents(value) {
+    const normalized = normalizeWhitespace(value).replace(/\u00a0/g, " ").replace(/€/g, "").replace(/\bEUR\b/gi, "").trim();
+    if (/^free$/i.test(normalized)) return 0;
+    const match = /^(\d{1,5})(?:[,.](\d{1,2}))?$/.exec(normalized);
+    if (!match) return null;
+    const cents = (match[2] || "").padEnd(2, "0");
+    return Number(match[1]) * 100 + Number(cents || "0");
+  }
+
+  function extractVisiblePriceCents(value) {
+    const text = normalizeWhitespace(value).replace(/\u00a0/g, " ");
+    if (/\bfree\b/i.test(text)) return 0;
+    const matches = [...text.matchAll(/(\d{1,5}(?:[,.]\d{1,2})?)\s*(?:€|EUR\b)/gi)];
+    return matches.length === 1 ? parseEuroCents(matches[0][1]) : null;
+  }
+
+  function isEligibleUnderMaxPrice(candidate, maxPriceCents) {
+    return Boolean(candidate?.actionable) && Number.isInteger(candidate.priceCents) && candidate.priceCents >= 0 && candidate.priceCents <= maxPriceCents;
+  }
+
+  function validateAutoWatchConfig(config) {
+    const event = parseEventInput(config.eventInput);
+    if (!event) return { ok: false, error: "Enter a valid Kide event ID or URL." };
+    const targetMode = config.targetMode;
+    const exactVariantName = normalizeWhitespace(config.exactVariantName);
+    const maxPriceCents = targetMode === "first_available_under_price" ? parseEuroCents(config.maxPriceInput) : null;
+    if (targetMode === "exact_variant" && !exactVariantName) return { ok: false, error: "Enter an exact variant name." };
+    if (targetMode === "first_available_under_price" && (!Number.isInteger(maxPriceCents) || maxPriceCents < 0 || maxPriceCents > 1_000_000)) return { ok: false, error: "Enter a valid maximum price." };
+    const saleStart = config.startWatchingNow ? config.now : parseLocalSaleStart(config.saleStartInput);
+    if (!saleStart) return { ok: false, error: "Choose a sale start time or Start watching now." };
+    const timeoutMinutes = Number(config.timeoutInput);
+    if (!Number.isInteger(timeoutMinutes) || timeoutMinutes < 1 || timeoutMinutes > 60) return { ok: false, error: "Enter a valid watch timeout." };
+    return { ok: true, value: { ...event, targetMode, exactVariantName: targetMode === "exact_variant" ? exactVariantName : null, maxPriceCents, saleStart, expiresAt: calculateWatchExpiry(saleStart, timeoutMinutes), timeoutMinutes } };
+  }
+
+  globalThis.KideChromePoc = Object.freeze({ normalizeWhitespace, exactVariantMatch, parseEventInput, pageEventId, pageHasChallenge, isKideReservationControl, canCreateReservation, parseLocalSaleStart, calculateWatchExpiry, autoWatchState, parseEuroCents, extractVisiblePriceCents, isEligibleUnderMaxPrice, validateAutoWatchConfig });
 })();

@@ -16,6 +16,18 @@
     for (const container of localContainers(variantElement)) for (const button of container.querySelectorAll("button, [role='button']")) { const label = helpers.normalizeWhitespace(button.innerText || button.getAttribute("aria-label") || ""); if (visible(button) && ACTION_BUTTON.test(label) && !SOLD_OUT.test(label) && !button.matches("[disabled], [aria-disabled='true']")) return button; }
     return null;
   }
+  function candidateFromReservationItem(item) {
+    const text = visibleText(item); const priceCents = helpers.extractVisiblePriceCents(text); const priceMatch = text.match(/\d{1,5}(?:[,.]\d{1,2})?\s*(?:€|EUR\b)/i);
+    return { control: item, actionable: Boolean(item && visible(item) && !SOLD_OUT.test(text) && !item.matches("[disabled], [aria-disabled='true']")), priceCents, variantName: helpers.normalizeWhitespace(priceMatch ? text.slice(0, priceMatch.index) : text) || "Kide ticket" };
+  }
+  function firstEligibleCandidateUnderPrice(maxPriceCents) {
+    for (const item of document.querySelectorAll('o-item[ng-click*="onCreateEditOrCancelReservation"], o-item[data-ng-click*="onCreateEditOrCancelReservation"]')) {
+      if (!helpers.isKideReservationControl(item.tagName, item.getAttribute("ng-click"), item.getAttribute("data-ng-click"))) continue;
+      const candidate = candidateFromReservationItem(item);
+      if (helpers.isEligibleUnderMaxPrice(candidate, maxPriceCents)) return candidate;
+    }
+    return null;
+  }
   function reservationSignal() { for (const element of document.body.querySelectorAll("body *")) { const text = visibleText(element); if (text && RESERVATION_UI.test(text) && text.length < 500) return text; } return null; }
   function waitFor(check, timeoutMs = 25_000) { return new Promise((resolve) => { const initial = check(); if (initial) return resolve(initial); const watch = new MutationObserver(() => { const value = check(); if (value) { watch.disconnect(); clearTimeout(timeout); resolve(value); } }); const timeout = window.setTimeout(() => { watch.disconnect(); resolve(null); }, timeoutMs); watch.observe(document.body, { childList: true, subtree: true, characterData: true }); }); }
   function verificationRequired() { return helpers.pageHasChallenge(document.body.innerText || ""); }
@@ -23,7 +35,7 @@
   async function readWatch() { return (await chrome.storage.local.get(WATCH_KEY))[WATCH_KEY] ?? null; }
   async function writeWatch(watch) { await chrome.storage.local.set({ [WATCH_KEY]: watch }); return watch; }
   async function terminal(watch, terminalResult, message) { clearWatchRuntime(); return writeWatch({ ...watch, armed: false, terminalResult, status: terminalResult, message, completedAt: Date.now() }); }
-  function showIndicator(watch, status) { let badge = document.querySelector("#kide-auto-reserve-indicator"); if (!watch.armed) return badge?.remove(); if (!badge) { badge = document.createElement("div"); badge.id = "kide-auto-reserve-indicator"; badge.style.cssText = "position:fixed;right:12px;bottom:12px;z-index:2147483647;padding:8px 10px;border-radius:6px;background:#3f2c88;color:#fff;font:12px system-ui;box-shadow:0 2px 10px #0004;pointer-events:none"; document.body.append(badge); } badge.textContent = `KIDE AUTO RESERVE ARMED · ${watch.variantName} · ${status}`; }
+  function showIndicator(watch, status) { let badge = document.querySelector("#kide-auto-reserve-indicator"); if (!watch.armed) return badge?.remove(); if (!badge) { badge = document.createElement("div"); badge.id = "kide-auto-reserve-indicator"; badge.style.cssText = "position:fixed;right:12px;bottom:12px;z-index:2147483647;padding:8px 10px;border-radius:6px;background:#3f2c88;color:#fff;font:12px system-ui;box-shadow:0 2px 10px #0004;pointer-events:none"; document.body.append(badge); } const target = watch.targetMode === "first_available_under_price" ? `first under ${(watch.maxPriceCents / 100).toFixed(2)} €` : watch.exactVariantName; badge.textContent = `KIDE AUTO RESERVE ARMED · ${target} · ${status}`; }
 
   async function locateTarget({ eventId, variantName }) {
     if (helpers.pageEventId(location.href) !== eventId) return { state: "EVENT_NOT_FOUND", message: "Open the selected Kide event and try again." };
@@ -50,8 +62,9 @@
       if (!watch.navigationAttempted && now >= watch.saleStart - 60_000) { await writeWatch({ ...watch, navigationAttempted: true }); location.assign(watch.eventUrl); }
       return;
     }
-    const variantElement = findExactVariantElement(watch.variantName);
-    const status = helpers.autoWatchState(watch, now, verificationRequired(), Boolean(variantElement));
+    const exactVariant = watch.targetMode === "first_available_under_price" ? null : findExactVariantElement(watch.exactVariantName ?? watch.variantName);
+    const candidate = watch.targetMode === "first_available_under_price" ? firstEligibleCandidateUnderPrice(watch.maxPriceCents) : exactVariant ? { control: findReservationButtonForVariant(exactVariant), variantName: watch.exactVariantName ?? watch.variantName, priceCents: null } : null;
+    const status = helpers.autoWatchState(watch, now, verificationRequired(), Boolean(candidate?.control));
     showIndicator(watch, status);
     if (status === "WATCH_EXPIRED" || status === "VERIFICATION_REQUIRED") return terminal(watch, status, status === "WATCH_EXPIRED" ? "The bounded auto-reservation watch expired." : "Kide requires normal manual verification. No reservation was clicked.");
     if (watch.reservationAttempted) return terminal(watch, "RESERVATION_RESULT_UNKNOWN", "A reservation attempt was already recorded. The extension will never click again for this arm.");
@@ -64,15 +77,16 @@
     }
     if (!observer) { observer = new MutationObserver(() => void inspectAutoWatch()); observer.observe(document.body, { childList: true, subtree: true, characterData: true }); }
     if (status === "WAITING_FOR_VARIANT") { clearTimeout(reloadTimer); reloadTimer = window.setTimeout(() => { if (!attemptLock) location.reload(); }, 4_000); return; }
-    const control = variantElement && findReservationButtonForVariant(variantElement);
+    const control = candidate?.control;
     if (!control) { await writeWatch({ ...watch, status: "WAITING_FOR_VARIANT" }); clearTimeout(reloadTimer); reloadTimer = window.setTimeout(() => location.reload(), 4_000); return; }
     const marked = await markAttempted(watch);
     if (!marked) return;
     clearWatchRuntime();
-    const before = reservationSignal(); control.click();
+    const attempted = { ...marked, selectedVariantName: candidate.variantName, selectedPriceCents: candidate.priceCents };
+    await writeWatch(attempted); const before = reservationSignal(); control.click();
     const after = await waitFor(() => { if (verificationRequired()) return "challenge"; const signal = reservationSignal(); return signal && signal !== before ? signal : null; }, 12_000);
-    if (after === "challenge") return terminal(marked, "VERIFICATION_REQUIRED", "Kide displayed a verification state after the one reservation click.");
-    return terminal(marked, after ? "RESERVATION_CONFIRMED" : "RESERVATION_RESULT_UNKNOWN", after ? "Kide shows an active temporary reservation. STOPPING BEFORE PAYMENT." : "One reservation click was made but the visible Kide result was unclear. The extension will not retry.");
+    if (after === "challenge") return terminal(attempted, "VERIFICATION_REQUIRED", "Kide displayed a verification state after the one reservation click.");
+    return terminal(attempted, after ? "RESERVATION_CONFIRMED" : "RESERVATION_RESULT_UNKNOWN", after ? "Kide shows an active temporary reservation. STOPPING BEFORE PAYMENT." : "One reservation click was made but the visible Kide result was unclear. The extension will not retry.");
   }
 
   async function resumeAutoWatch() { attemptLock = false; await inspectAutoWatch(); }
