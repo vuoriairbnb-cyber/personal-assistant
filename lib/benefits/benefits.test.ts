@@ -6,7 +6,7 @@ import { rankBenefits } from "./search.ts";
 import type { NormalizedBenefit } from "./types.ts";
 
 const unions = new Map([["66", "ASIA"], ["60", "Agronomiliitto"]]);
-const base = (overrides: Partial<NormalizedBenefit>): NormalizedBenefit => ({ provider: "memberplus", externalId: "x", title: "Example", heading: null, description: "", providerCategory: null, normalizedCategory: null, offerer: null, benefitText: null, redemptionType: "unknown", redemptionCode: null, redemptionUrl: null, sourceUrl: null, imageUrl: null, validFrom: null, validUntil: null, unionId: null, unionName: null, isGeneralBenefit: true, isRecommended: false, searchText: "", ...overrides });
+const base = (overrides: Partial<NormalizedBenefit>): NormalizedBenefit => ({ provider: "memberplus", externalId: "x", title: "Example", heading: null, description: "", providerCategory: null, normalizedCategory: null, offerer: null, locations: [], restrictions: null, benefitText: null, redemptionType: "unknown", redemptionCode: null, redemptionUrl: null, sourceUrl: null, imageUrl: null, validFrom: null, validUntil: null, unionId: null, unionName: null, isGeneralBenefit: true, isRecommended: false, providerMetadata: null, searchText: "", ...overrides } as NormalizedBenefit);
 
 test("normalizes general and union-specific Member+ benefits with taxonomy mapping", () => {
   const autodude = normalizeMemberPlusBenefit({ wpId: 11365, title: "Autodude", heading: "-10%", content: "<p>Auto-osia</p>", extendedProperties: [{ key: "categories", value: "koti-ja-arki" }] }, unions);

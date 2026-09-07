@@ -1,5 +1,5 @@
 export type BenefitProviderId = "memberplus" | "cityshoppari";
-export type BenefitRedemptionType = "code" | "link" | "instructions" | "unknown";
+export type BenefitRedemptionType = "code" | "link" | "instructions" | "cityshoppari_app" | "unknown";
 
 export type NormalizedBenefit = {
   provider: BenefitProviderId;
@@ -10,6 +10,8 @@ export type NormalizedBenefit = {
   providerCategory: string | null;
   normalizedCategory: string | null;
   offerer: string | null;
+  locations: string[];
+  restrictions: string | null;
   benefitText: string | null;
   redemptionType: BenefitRedemptionType;
   redemptionCode: string | null;
@@ -22,6 +24,7 @@ export type NormalizedBenefit = {
   unionName: string | null;
   isGeneralBenefit: boolean;
   isRecommended: boolean;
+  providerMetadata: Record<string, unknown> | null;
   searchText: string;
 };
 
