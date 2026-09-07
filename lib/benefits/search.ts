@@ -1,0 +1,9 @@
+import type { BenefitSearchUser, NormalizedBenefit } from "@/lib/benefits/types";
+
+function words(value: string): string[] { return value.toLocaleLowerCase("fi-FI").match(/[\p{L}\p{N}]+/gu) ?? []; }
+function queryTerms(query: string): string[] { return [...new Set(words(query).flatMap((word) => { const terms = [word]; if (word.length >= 8) { terms.push(word.slice(0, 4), word.slice(-6)); } return terms; }))].filter((term) => term.length >= 3); }
+function fieldScore(text: string | null, terms: string[], exact: number, prefix: number): number { const tokens = words(text ?? ""); return terms.reduce((score, term) => score + tokens.reduce((sum, token) => sum + (token === term ? exact : token.startsWith(term) ? prefix : 0), 0), 0); }
+export function isBenefitAccessible(benefit: NormalizedBenefit, user: BenefitSearchUser): boolean { return benefit.isGeneralBenefit || Boolean(user.memberPlusUnionId && benefit.unionId === user.memberPlusUnionId); }
+export function rankBenefits(benefits: NormalizedBenefit[], query: string, user: BenefitSearchUser): NormalizedBenefit[] {
+  const terms = queryTerms(query); return benefits.filter((benefit) => isBenefitAccessible(benefit, user) && (!benefit.validUntil || Date.parse(benefit.validUntil) >= Date.now())).map((benefit) => { if (!terms.length) return { benefit, score: benefit.isRecommended ? 1 : 0 }; const score = fieldScore(benefit.title, terms, 60, 38) + fieldScore(benefit.heading, terms, 30, 18) + fieldScore(benefit.providerCategory, terms, 18, 10) + fieldScore(benefit.benefitText, terms, 12, 7) + fieldScore(benefit.description, terms, 4, 2); return { benefit, score }; }).filter(({ score }) => !terms.length || score > 0).sort((a, b) => b.score - a.score || Number(b.benefit.isRecommended) - Number(a.benefit.isRecommended) || a.benefit.title.localeCompare(b.benefit.title, "fi")).map(({ benefit }) => benefit);
+}

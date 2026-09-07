@@ -8,6 +8,7 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { saveSettings } from "@/lib/actions/settings";
 import { signOut } from "@/lib/actions/auth";
 import { AiCostsSection } from "@/components/settings/AiCostsSection";
+import { fetchMemberPlusUnions } from "@/lib/benefits/providers/memberplus";
 
 export default async function SettingsPage() {
   const supabase = await createServerSupabaseClient();
@@ -17,9 +18,10 @@ export default async function SettingsPage() {
   const settings = await getAppSettings();
 
   const { data: profile } = user
-    ? await supabase.from("profiles").select("role").eq("id", user.id).single()
+    ? await supabase.from("profiles").select("role,member_plus_union_id").eq("id", user.id).single()
     : { data: null };
   const isOwner = profile?.role === "owner";
+  const unions = await fetchMemberPlusUnions().catch(() => []);
 
   return (
     <div className="max-w-xl space-y-8">
@@ -58,6 +60,12 @@ export default async function SettingsPage() {
           </Field>
           <Field label="Language">
             <Input name="language" defaultValue={settings?.language ?? "en"} />
+          </Field>
+          <Field label="Member+ union">
+            <Select name="member_plus_union_id" defaultValue={profile?.member_plus_union_id ?? ""}>
+              <option value="">No union selected (general benefits only)</option>
+              {unions.map((union) => <option key={union.id} value={union.id}>{union.name}</option>)}
+            </Select>
           </Field>
           <Button type="submit">Save settings</Button>
         </form>

@@ -35,6 +35,8 @@ export type Database = {
           approved_by: string | null;
           approved_at: string | null;
           rejected_at: string | null;
+          member_plus_union_id: string | null;
+          member_plus_union_name: string | null;
           created_at: string;
           updated_at: string;
           [key: string]: unknown;
@@ -48,6 +50,8 @@ export type Database = {
           approved_by?: string | null;
           approved_at?: string | null;
           rejected_at?: string | null;
+          member_plus_union_id?: string | null;
+          member_plus_union_name?: string | null;
           [key: string]: unknown;
         };
         Update: {
@@ -58,6 +62,8 @@ export type Database = {
           approved_by?: string | null;
           approved_at?: string | null;
           rejected_at?: string | null;
+          member_plus_union_id?: string | null;
+          member_plus_union_name?: string | null;
           [key: string]: unknown;
         };
         Relationships: [];
