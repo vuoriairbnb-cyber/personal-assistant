@@ -1,5 +1,5 @@
-export type BenefitProviderId = "memberplus" | "cityshoppari";
-export type BenefitRedemptionType = "code" | "link" | "instructions" | "cityshoppari_app" | "unknown";
+export type BenefitProviderId = "memberplus" | "cityshoppari" | "frank";
+export type BenefitRedemptionType = "code" | "link" | "instructions" | "cityshoppari_app" | "provider_app" | "provider_link" | "unknown";
 
 export type NormalizedBenefit = {
   provider: BenefitProviderId;

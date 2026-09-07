@@ -34,3 +34,9 @@ test("ranking favors word-start title matches and hides inaccessible union benef
 test("Member+ API failures are propagated to the aggregation layer without malformed results", async () => {
   await assert.rejects(() => import("./providers/memberplus.ts").then(({ fetchMemberPlusBenefits }) => fetchMemberPlusBenefits(async () => new Response("no", { status: 503 }))));
 });
+
+test("generic ranking includes a Frank offer beside other providers", () => {
+  const frank = base({ provider: "frank", externalId: "offer_5980", title: "Syysale", offerer: "Hotels.com", description: "Matkailu ja majoitus" });
+  const memberPlus = base({ provider: "memberplus", externalId: "memberplus-hotel", title: "Hotellietu", description: "Majoitus" });
+  assert.deepEqual(rankBenefits([memberPlus, frank], "majoitus", { memberPlusUnionId: null, memberPlusUnionName: null }).map((benefit) => benefit.provider), ["memberplus", "frank"]);
+});
