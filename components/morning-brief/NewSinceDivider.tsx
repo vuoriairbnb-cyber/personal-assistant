@@ -1,0 +1,1 @@
+export function NewSinceDivider({ count = 3 }: { count?: number }) { return <div className="flex items-center gap-3 py-5 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-tertiary"><span className="h-px flex-1 bg-border-subtle" />{count} new stories since 08:12<span className="h-px flex-1 bg-border-subtle" /></div>; }

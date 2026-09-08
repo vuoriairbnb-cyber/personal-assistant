@@ -1,0 +1,4 @@
+import { TrendingDown, TrendingUp } from "lucide-react";
+import { marketPulse } from "@/components/morning-brief/mock-data";
+
+export function MarketPulse() { return <section aria-label="Market pulse" className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border-subtle bg-border-subtle sm:grid-cols-4">{marketPulse.map((market) => { const Icon = market.positive ? TrendingUp : TrendingDown; return <div key={market.label} className="bg-card px-3 py-3"><p className="truncate text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">{market.label}</p><p className="mt-1 font-mono text-base text-text-primary">{market.value}</p><p className={`mt-1 flex items-center gap-1 text-xs font-medium ${market.positive ? "text-success-strong" : "text-danger-strong"}`}><Icon size={12} />{market.change}</p></div>; })}</section>; }
