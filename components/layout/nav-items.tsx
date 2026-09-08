@@ -1,4 +1,4 @@
-import { LayoutDashboard, Inbox, Calendar, Flag, Settings, MessagesSquare, Ticket, BadgePercent } from "lucide-react";
+import { LayoutDashboard, Inbox, Calendar, Flag, Settings, MessagesSquare, Ticket, BadgePercent, Newspaper } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export interface NavItem {
@@ -9,6 +9,7 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/morning-brief", label: "Morning Brief", icon: Newspaper },
   { href: "/inbox", label: "Inbox", icon: Inbox },
   { href: "/conversations", label: "Keskustelut", icon: MessagesSquare },
   { href: "/calendar", label: "Calendar", icon: Calendar },
