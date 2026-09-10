@@ -5,6 +5,63 @@ import { ArrowLeft, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { StoryActions } from "@/components/morning-brief/StoryActions";
 import { StoryImage } from "@/components/morning-brief/StoryImage";
-import type { MorningBriefStory } from "@/components/morning-brief/mock-data";
+import { getStoryBriefing, type MorningBriefStory, type StoryCoverage } from "@/components/morning-brief/mock-data";
 
-export function StoryDetail({ story, relatedStories }: { story: MorningBriefStory; relatedStories: MorningBriefStory[] }) { return <article className="mx-auto max-w-3xl"><Link href="/morning-brief" className="inline-flex items-center gap-1 text-sm font-medium no-underline hover:text-accent-active"><ArrowLeft size={16} />Back to Morning Brief</Link><div className="mt-7"><StoryImage label={story.imageLabel} tone={story.imageTone} featured /></div><div className="mt-6 flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-wide text-accent">{story.category}</p><h1 className="mt-2 font-serif text-4xl leading-[1.05] text-text-primary sm:text-5xl">{story.title}</h1><p className="mt-4 text-sm text-text-secondary">{story.source} <span aria-hidden>·</span> {story.publishedLabel} <span aria-hidden>·</span> {story.readTime}</p></div><StoryActions /></div><div className="mt-5 flex flex-wrap gap-2">{story.tags.map((tag) => <Badge key={tag}>{tag}</Badge>)}</div><p className="mt-6 text-lg leading-8 text-text-secondary">{story.summary}</p><section className="mt-8 border-l-2 border-accent pl-4" aria-labelledby="why-title"><h2 id="why-title" className="font-serif text-2xl text-text-primary">Why this matters to you</h2><p className="mt-2 leading-7 text-text-secondary">{story.whyItMatters}</p></section><section className="mt-9" aria-labelledby="takeaways-title"><h2 id="takeaways-title" className="font-serif text-2xl text-text-primary">Key takeaways</h2><ul className="mt-3 space-y-3 text-sm leading-6 text-text-secondary">{story.keyTakeaways.map((takeaway) => <li key={takeaway} className="border-b border-border-subtle pb-3">{takeaway}</li>)}</ul></section><section className="mt-9" aria-labelledby="exposure-title"><h2 id="exposure-title" className="font-serif text-2xl text-text-primary">Your exposure</h2><div className="mt-3 flex flex-wrap items-center gap-2 text-sm font-medium text-text-secondary">{story.exposurePath.map((part, index) => <span key={part} className="flex items-center gap-2"><span className="rounded-full bg-sand-200 px-3 py-1.5 text-text-primary">{part}</span>{index < story.exposurePath.length - 1 && <span aria-hidden>→</span>}</span>)}</div></section><section className="mt-9 border-t border-border-subtle pt-7" aria-labelledby="coverage-title"><h2 id="coverage-title" className="font-serif text-2xl text-text-primary">More coverage</h2><div className="mt-3 divide-y divide-border-subtle">{[{ source: story.source, label: "Primary report", publishedLabel: story.publishedLabel }, ...story.relatedCoverage].map((coverage) => <div key={`${coverage.source}-${coverage.label}`} className="flex items-center justify-between gap-4 py-4"><div><p className="font-medium text-text-primary">{coverage.source}</p><p className="text-sm text-text-secondary">{coverage.label}</p></div><span className="text-xs text-text-tertiary">{coverage.publishedLabel}</span></div>)}</div></section><a href="https://example.com/morning-brief/original" target="_blank" rel="noreferrer" className="mt-8 inline-flex items-center gap-1 text-sm font-medium text-accent hover:text-accent-active">Open original article <ExternalLink size={15} /></a><section className="mt-12 border-t border-border-subtle pt-7" aria-labelledby="related-title"><h2 id="related-title" className="font-serif text-2xl text-text-primary">Related stories</h2><div className="mt-3 divide-y divide-border-subtle">{relatedStories.map((item) => <Link key={item.id} href={`/morning-brief/story/${item.id}`} className="block py-4 no-underline hover:text-accent"><p className="font-serif text-xl text-text-primary">{item.title}</p><p className="mt-1 text-sm text-text-secondary">{item.source} <span aria-hidden>·</span> {item.publishedLabel}</p></Link>)}</div></section></article>; }
+const contentTypeLabel: Record<StoryCoverage["contentType"], string> = {
+  news: "Original reporting",
+  analysis: "Analysis",
+  "local-perspective": "Local perspective",
+};
+
+export function StoryDetail({ story, relatedStories }: { story: MorningBriefStory; relatedStories: MorningBriefStory[] }) {
+  const briefing = getStoryBriefing(story);
+  const coverage: StoryCoverage[] = [
+    { source: story.source, title: `Mock primary coverage: ${story.title}`, contentType: "news", publishedLabel: story.publishedLabel, url: story.sourceUrl },
+    ...story.relatedCoverage,
+  ];
+
+  return (
+    <article className="mx-auto max-w-4xl pb-10">
+      <div className="flex items-center justify-between gap-4">
+        <Link href="/morning-brief" className="inline-flex min-h-10 items-center gap-1 text-sm font-medium no-underline hover:text-accent-active"><ArrowLeft size={16} />Back to Morning Brief</Link>
+        <StoryActions />
+      </div>
+
+      <div className="mt-5"><StoryImage imageUrl={story.imageUrl} imageAlt={story.imageAlt} label={story.imageLabel} tone={story.imageTone} featured /></div>
+      {story.imageSource && <p className="mt-2 text-xs text-text-tertiary">Image: {story.imageSource}</p>}
+
+      <div className="mx-auto max-w-[44rem]">
+        <div className="mt-7 flex flex-wrap gap-2">{story.tags.map((tag) => <Badge key={tag}>{tag}</Badge>)}</div>
+        <h1 className="mt-4 font-serif text-4xl leading-[1.05] text-text-primary sm:text-5xl">{story.title}</h1>
+        <p className="mt-4 text-sm text-text-secondary">{story.source} <span aria-hidden>·</span> {story.publishedLabel} <span aria-hidden>·</span> {story.estimatedReadTime}</p>
+
+        <section className="mt-9 border-t border-border-subtle pt-7" aria-labelledby="briefing-title">
+          <h2 id="briefing-title" className="font-serif text-2xl text-text-primary">Briefing</h2>
+          <div className="mt-4 space-y-5 text-[1.02rem] leading-8 text-text-secondary">{briefing.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div>
+        </section>
+
+        <section className="mt-10 border-l-2 border-accent pl-4" aria-labelledby="why-title">
+          <h2 id="why-title" className="font-serif text-2xl text-text-primary">Why this matters to you</h2>
+          <p className="mt-3 leading-7 text-text-secondary">{briefing.whyItMatters}</p>
+        </section>
+
+        <section className="mt-10" aria-labelledby="takeaways-title">
+          <h2 id="takeaways-title" className="font-serif text-2xl text-text-primary">Key takeaways</h2>
+          <ul className="mt-3 space-y-3 text-sm leading-6 text-text-secondary">{briefing.keyTakeaways.map((takeaway, index) => <li key={takeaway} className="flex gap-3 border-b border-border-subtle pb-3"><span className="font-serif text-lg text-accent">{index + 1}</span><span>{takeaway}</span></li>)}</ul>
+        </section>
+
+        {briefing.exposurePath && <section className="mt-10" aria-labelledby="exposure-title"><h2 id="exposure-title" className="font-serif text-2xl text-text-primary">Your exposure</h2><div className="mt-3 flex flex-wrap items-center gap-2 text-sm font-medium text-text-secondary">{briefing.exposurePath.map((part, index) => <span key={part} className="flex items-center gap-2"><span className="rounded-full bg-sand-200 px-3 py-1.5 text-text-primary">{part}</span>{index < briefing.exposurePath!.length - 1 && <span aria-hidden>→</span>}</span>)}</div></section>}
+
+        <section className="mt-10 border-t border-border-subtle pt-7" aria-labelledby="coverage-title">
+          <h2 id="coverage-title" className="font-serif text-2xl text-text-primary">More coverage</h2>
+          <p className="mt-2 text-sm text-text-secondary">Publications represented in this story cluster. Links are mock source actions in this UI phase.</p>
+          <div className="mt-3 divide-y divide-border-subtle">{coverage.map((item) => <div key={`${item.source}-${item.title}`} className="flex items-center justify-between gap-4 py-4"><div className="min-w-0"><p className="font-medium text-text-primary">{item.source}</p><p className="mt-1 text-sm text-text-secondary">{item.title}</p><p className="mt-1 text-xs text-text-tertiary">{contentTypeLabel[item.contentType]} <span aria-hidden>·</span> {item.publishedLabel}</p></div>{item.url && <a href={item.url} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-accent hover:text-accent-active">Open <ExternalLink size={15} /></a>}</div>)}</div>
+        </section>
+
+        <section className="mt-10 rounded-lg bg-sand-200/50 px-5 py-5" aria-labelledby="feedback-title"><h2 id="feedback-title" className="font-serif text-xl text-text-primary">Was this useful?</h2><p className="mt-1 text-sm text-text-secondary">Feedback is kept locally in this mock UI.</p><div className="mt-3 flex gap-3"><button type="button" className="min-h-10 rounded-full border border-border-subtle px-4 text-sm font-medium hover:border-accent">♥ More like this</button><button type="button" className="min-h-10 rounded-full border border-border-subtle px-4 text-sm font-medium hover:border-accent">Not relevant</button></div></section>
+
+        <section className="mt-12 border-t border-border-subtle pt-7" aria-labelledby="related-title"><h2 id="related-title" className="font-serif text-2xl text-text-primary">Related stories</h2><div className="mt-3 divide-y divide-border-subtle">{relatedStories.map((item) => <Link key={item.id} href={`/morning-brief/story/${item.id}`} className="block py-4 no-underline hover:text-accent"><p className="font-serif text-xl text-text-primary">{item.title}</p><p className="mt-1 text-sm text-text-secondary">{item.source} <span aria-hidden>·</span> {item.publishedLabel}</p></Link>)}</div></section>
+      </div>
+    </article>
+  );
+}
