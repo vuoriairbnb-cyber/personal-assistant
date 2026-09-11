@@ -9,13 +9,11 @@ import { shouldApplyImportSignal } from "@/lib/morning-brief/import-dedup";
 import { ingestMorningBriefSources } from "@/lib/morning-brief/ingestion";
 
 export async function regenerateMockMorningBrief() {
-  if (process.env.NODE_ENV !== "development") return { ok: false, error: "Mock generation is available only in development." };
-  try { const { user } = await requireApprovedUser(); await generateMockMorningBriefForUser(user.id, new Date()); revalidatePath("/morning-brief"); return { ok: true }; } catch { return { ok: false, error: "Could not generate the development brief." }; }
+  try { const { user } = await requireApprovedUser(); await generateMockMorningBriefForUser(user.id, new Date()); revalidatePath("/morning-brief"); return { ok: true }; } catch { return { ok: false, error: "Could not regenerate the Morning Brief." }; }
 }
 
-/** Deliberately development-only: production scheduling is outside this phase. */
+/** Manual, authenticated ingestion. Scheduling remains intentionally out of scope. */
 export async function fetchLiveMorningBriefSources() {
-  if (process.env.NODE_ENV !== "development") return { ok: false, error: "Live source fetching is available only in development." };
   try { await requireApprovedUser(); return { ok: true, summary: await ingestMorningBriefSources() }; } catch { return { ok: false, error: "Could not fetch live open sources." }; }
 }
 
