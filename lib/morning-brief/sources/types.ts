@@ -39,6 +39,8 @@ export type SourceIngestionSummary = {
   source: string;
   fetched: number;
   parsed: number;
+  considered: number;
+  filtered: number;
   new: number;
   duplicates: number;
   classified: number;
@@ -46,4 +48,5 @@ export type SourceIngestionSummary = {
   embedded: number;
   reusedEmbeddings: number;
   failed: number;
+  error?: string;
 };

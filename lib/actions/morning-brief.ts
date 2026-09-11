@@ -14,7 +14,7 @@ export async function regenerateMockMorningBrief() {
 
 /** Manual, authenticated ingestion. Scheduling remains intentionally out of scope. */
 export async function fetchLiveMorningBriefSources() {
-  try { await requireApprovedUser(); return { ok: true, summary: await ingestMorningBriefSources() }; } catch { return { ok: false, error: "Could not fetch live open sources." }; }
+  try { await requireApprovedUser(); return { ok: true, summary: await ingestMorningBriefSources() }; } catch (error) { console.warn("[morning-brief] manual ingestion action failed", { error: error instanceof Error ? error.message.slice(0, 180) : "Unknown error" }); return { ok: false, error: "Could not fetch live open sources. Please try again." }; }
 }
 
 type UserFeedbackEvent = Exclude<keyof typeof FEEDBACK_STRENGTH, "import"> | "unlike" | "unsave";

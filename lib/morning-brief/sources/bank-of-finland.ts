@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { MORNING_BRIEF_FEEDS } from "./config";
+import { fetchPublicSource } from "./http";
 import type { MorningBriefSourceAdapter, SourceCandidate, SourceFetch } from "./types";
 
 const decode = (value: string) => value.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -24,4 +25,4 @@ export function parseBankOfFinlandNewsIndex(html: string, feedUrl: string, maxIt
   return candidates;
 }
 
-export const bankOfFinlandSourceAdapter: MorningBriefSourceAdapter = { sourceSlug: "bank-of-finland", async fetchCandidates(fetcher: SourceFetch = fetch) { const feed = MORNING_BRIEF_FEEDS.find((item) => item.id === "bank-of-finland-news"); if (!feed?.enabled) return []; const response = await fetcher(feed.url, { cache: "no-store", headers: { Accept: "text/html" } }); if (!response.ok) throw new Error(`Bank of Finland news index unavailable (${response.status}).`); return parseBankOfFinlandNewsIndex(await response.text(), feed.url, feed.maxItems); } };
+export const bankOfFinlandSourceAdapter: MorningBriefSourceAdapter = { sourceSlug: "bank-of-finland", async fetchCandidates(fetcher: SourceFetch = fetch) { const feed = MORNING_BRIEF_FEEDS.find((item) => item.id === "bank-of-finland-news"); if (!feed?.enabled) return []; const response = await fetchPublicSource(feed.url, { cache: "no-store", headers: { Accept: "text/html" } }, fetcher); if (!response.ok) throw new Error(`Bank of Finland news index unavailable (${response.status}).`); return parseBankOfFinlandNewsIndex(await response.text(), feed.url, feed.maxItems); } };
