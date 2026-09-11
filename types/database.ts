@@ -21,6 +21,11 @@ export type CalendarConnectionStatus = "connected" | "syncing" | "error" | "disc
  * never stored here, it's synthesized at the query layer from the trips table. */
 export type CalendarEventDbSource = "manual" | "airbnb" | "google";
 export type GolfWatchStatus = "active" | "processing" | "matched" | "expired" | "cancelled";
+export type MorningBriefSourceType = "rss" | "api" | "web_metadata" | "manual" | "official" | "other";
+export type MorningBriefContentType = "breaking_news" | "news" | "analysis" | "opinion" | "explainer" | "long_read";
+export type MorningBriefAccessType = "public" | "subscription" | "unknown";
+export type MorningBriefAssetType = "fund" | "equity" | "bond" | "loan_fund" | "credit_strategy" | "other";
+export type MorningBriefSection = "top_5" | "vietnam" | "credit" | "finland" | "markets" | "politics" | "emerging_frontier" | "vc_pe" | "world" | "worth_reading";
 
 export type Database = {
   public: {
@@ -353,6 +358,87 @@ export type Database = {
         Row: { id: string; watch_id: string; course: string; date: string; tee_time: string; player_name: string; player_name_normalized: string; first_seen_at: string; notified_at: string | null; [key: string]: unknown; };
         Insert: { id?: string; watch_id: string; course: string; date: string; tee_time: string; player_name: string; player_name_normalized: string; notified_at?: string | null; [key: string]: unknown; };
         Update: { notified_at?: string | null; [key: string]: unknown; }; Relationships: [];
+      };
+      morning_brief_sources: {
+        Row: { id: string; slug: string; name: string; base_url: string | null; source_type: MorningBriefSourceType; default_language: string | null; enabled: boolean; default_content_type: MorningBriefContentType | null; metadata_json: Record<string, unknown>; created_at: string; updated_at: string; [key: string]: unknown; };
+        Insert: { id?: string; slug: string; name: string; base_url?: string | null; source_type: MorningBriefSourceType; default_language?: string | null; enabled?: boolean; default_content_type?: MorningBriefContentType | null; metadata_json?: Record<string, unknown>; [key: string]: unknown; };
+        Update: { slug?: string; name?: string; base_url?: string | null; source_type?: MorningBriefSourceType; default_language?: string | null; enabled?: boolean; default_content_type?: MorningBriefContentType | null; metadata_json?: Record<string, unknown>; [key: string]: unknown; }; Relationships: [];
+      };
+      morning_brief_articles: {
+        Row: { id: string; source_id: string; source_article_id: string | null; title: string; subtitle: string | null; excerpt: string | null; body_text: string | null; canonical_url: string; author: string | null; published_at: string; fetched_at: string; language: string | null; content_type: MorningBriefContentType; access_type: MorningBriefAccessType; image_url: string | null; image_alt: string | null; image_source: string | null; raw_metadata_json: Record<string, unknown>; content_hash: string | null; created_at: string; updated_at: string; [key: string]: unknown; };
+        Insert: { id?: string; source_id: string; source_article_id?: string | null; title: string; subtitle?: string | null; excerpt?: string | null; body_text?: string | null; canonical_url: string; author?: string | null; published_at: string; fetched_at?: string; language?: string | null; content_type?: MorningBriefContentType; access_type?: MorningBriefAccessType; image_url?: string | null; image_alt?: string | null; image_source?: string | null; raw_metadata_json?: Record<string, unknown>; content_hash?: string | null; [key: string]: unknown; };
+        Update: Partial<Database["public"]["Tables"]["morning_brief_articles"]["Insert"]>; Relationships: [];
+      };
+      morning_brief_article_classifications: {
+        Row: { id: string; article_id: string; countries: string[]; regions: string[]; categories: string[]; topics: string[]; sectors: string[]; companies: string[]; people: string[]; asset_classes: string[]; funds: string[]; event_type: string | null; significance: number | null; consequence: number | null; scope: number | null; confidence: number | null; primary_section: MorningBriefSection | null; summary: string | null; why_it_matters: string | null; classification_version: string; created_at: string; updated_at: string; [key: string]: unknown; };
+        Insert: { id?: string; article_id: string; countries?: string[]; regions?: string[]; categories?: string[]; topics?: string[]; sectors?: string[]; companies?: string[]; people?: string[]; asset_classes?: string[]; funds?: string[]; event_type?: string | null; significance?: number | null; consequence?: number | null; scope?: number | null; confidence?: number | null; primary_section?: MorningBriefSection | null; summary?: string | null; why_it_matters?: string | null; classification_version: string; [key: string]: unknown; };
+        Update: Partial<Database["public"]["Tables"]["morning_brief_article_classifications"]["Insert"]>; Relationships: [];
+      };
+      morning_brief_article_embeddings: {
+        /** pgvector values are sent to PostgREST as a vector literal string, e.g. "[0.1,0.2]". */
+        Row: { id: string; article_id: string; embedding: string; embedding_model: string; embedding_version: string; input_hash: string; created_at: string; updated_at: string; [key: string]: unknown; };
+        Insert: { id?: string; article_id: string; embedding: string; embedding_model: string; embedding_version: string; input_hash: string; [key: string]: unknown; };
+        Update: { embedding?: string; embedding_model?: string; embedding_version?: string; input_hash?: string; [key: string]: unknown; }; Relationships: [];
+      };
+      morning_brief_story_clusters: {
+        Row: { id: string; primary_article_id: string | null; canonical_headline: string | null; canonical_summary: string | null; event_key: string | null; display_image_url: string | null; display_image_alt: string | null; display_image_source: string | null; first_published_at: string | null; latest_published_at: string | null; source_count: number; cluster_version: string; created_at: string; updated_at: string; [key: string]: unknown; };
+        Insert: { id?: string; primary_article_id?: string | null; canonical_headline?: string | null; canonical_summary?: string | null; event_key?: string | null; display_image_url?: string | null; display_image_alt?: string | null; display_image_source?: string | null; first_published_at?: string | null; latest_published_at?: string | null; source_count?: number; cluster_version?: string; [key: string]: unknown; };
+        Update: Partial<Database["public"]["Tables"]["morning_brief_story_clusters"]["Insert"]>; Relationships: [];
+      };
+      morning_brief_cluster_articles: {
+        Row: { cluster_id: string; article_id: string; relation_type: "primary" | "same_event" | "analysis" | "local_perspective" | "follow_up"; similarity: number | null; source_priority: number | null; created_at: string; [key: string]: unknown; };
+        Insert: { cluster_id: string; article_id: string; relation_type: "primary" | "same_event" | "analysis" | "local_perspective" | "follow_up"; similarity?: number | null; source_priority?: number | null; [key: string]: unknown; };
+        Update: { relation_type?: "primary" | "same_event" | "analysis" | "local_perspective" | "follow_up"; similarity?: number | null; source_priority?: number | null; [key: string]: unknown; }; Relationships: [];
+      };
+      morning_brief_story_briefings: {
+        Row: { id: string; story_cluster_id: string; paragraphs_json: string[]; why_it_matters: string; key_takeaways_json: string[]; exposure_path_json: string[] | null; generated_from_article_ids: string[]; generation_version: string; generated_at: string; created_at: string; [key: string]: unknown; };
+        Insert: { id?: string; story_cluster_id: string; paragraphs_json?: string[]; why_it_matters: string; key_takeaways_json?: string[]; exposure_path_json?: string[] | null; generated_from_article_ids?: string[]; generation_version: string; generated_at?: string; [key: string]: unknown; };
+        Update: { paragraphs_json?: string[]; why_it_matters?: string; key_takeaways_json?: string[]; exposure_path_json?: string[] | null; generated_from_article_ids?: string[]; generation_version?: string; generated_at?: string; [key: string]: unknown; }; Relationships: [];
+      };
+      morning_brief_portfolio_assets: {
+        Row: { id: string; user_id: string; name: string; slug: string; asset_type: MorningBriefAssetType; priority: number; active: boolean; metadata_json: Record<string, unknown>; created_at: string; updated_at: string; [key: string]: unknown; };
+        Insert: { id?: string; user_id: string; name: string; slug: string; asset_type: MorningBriefAssetType; priority?: number; active?: boolean; metadata_json?: Record<string, unknown>; [key: string]: unknown; };
+        Update: { name?: string; slug?: string; asset_type?: MorningBriefAssetType; priority?: number; active?: boolean; metadata_json?: Record<string, unknown>; [key: string]: unknown; }; Relationships: [];
+      };
+      morning_brief_portfolio_exposures: {
+        Row: { id: string; user_id: string; portfolio_asset_id: string; exposure_type: "country" | "company" | "sector" | "asset_class" | "topic" | "region"; exposure_key: string; weight: number | null; relevance_strength: number; valid_from: string | null; valid_to: string | null; metadata_json: Record<string, unknown>; created_at: string; updated_at: string; [key: string]: unknown; };
+        Insert: { id?: string; user_id: string; portfolio_asset_id: string; exposure_type: "country" | "company" | "sector" | "asset_class" | "topic" | "region"; exposure_key: string; weight?: number | null; relevance_strength?: number; valid_from?: string | null; valid_to?: string | null; metadata_json?: Record<string, unknown>; [key: string]: unknown; };
+        Update: { portfolio_asset_id?: string; exposure_type?: "country" | "company" | "sector" | "asset_class" | "topic" | "region"; exposure_key?: string; weight?: number | null; relevance_strength?: number; valid_from?: string | null; valid_to?: string | null; metadata_json?: Record<string, unknown>; [key: string]: unknown; }; Relationships: [];
+      };
+      morning_brief_user_preferences: {
+        Row: { id: string; user_id: string; dimension_type: "category" | "topic" | "country" | "region" | "sector" | "source" | "content_type"; dimension_key: string; explicit_weight: number; pinned: boolean; metadata_json: Record<string, unknown>; created_at: string; updated_at: string; [key: string]: unknown; };
+        Insert: { id?: string; user_id: string; dimension_type: "category" | "topic" | "country" | "region" | "sector" | "source" | "content_type"; dimension_key: string; explicit_weight?: number; pinned?: boolean; metadata_json?: Record<string, unknown>; [key: string]: unknown; };
+        Update: { dimension_type?: "category" | "topic" | "country" | "region" | "sector" | "source" | "content_type"; dimension_key?: string; explicit_weight?: number; pinned?: boolean; metadata_json?: Record<string, unknown>; [key: string]: unknown; }; Relationships: [];
+      };
+      morning_brief_feedback: {
+        Row: { id: string; user_id: string; article_id: string | null; story_cluster_id: string | null; event_type: string; signal_strength: number | null; metadata_json: Record<string, unknown>; created_at: string; [key: string]: unknown; };
+        Insert: { id?: string; user_id: string; article_id?: string | null; story_cluster_id?: string | null; event_type: string; signal_strength?: number | null; metadata_json?: Record<string, unknown>; [key: string]: unknown; };
+        Update: never; Relationships: [];
+      };
+      morning_brief_imports: {
+        Row: { id: string; user_id: string; original_url: string; normalized_url: string; linked_article_id: string | null; status: "pending" | "processing" | "completed" | "failed"; error_message: string | null; import_strength: number | null; created_at: string; processed_at: string | null; updated_at: string; [key: string]: unknown; };
+        Insert: { id?: string; user_id: string; original_url: string; normalized_url: string; linked_article_id?: string | null; status?: "pending" | "processing" | "completed" | "failed"; error_message?: string | null; import_strength?: number | null; processed_at?: string | null; [key: string]: unknown; };
+        Update: { status?: "pending" | "processing" | "completed" | "failed"; error_message?: string | null; import_strength?: number | null; processed_at?: string | null; [key: string]: unknown; }; Relationships: [];
+      };
+      morning_brief_learned_interests: {
+        Row: { id: string; user_id: string; dimension_type: string; dimension_key: string; affinity_score: number; positive_signal_count: number; negative_signal_count: number; last_signal_at: string | null; model_version: string; created_at: string; updated_at: string; [key: string]: unknown; };
+        Insert: { id?: string; user_id: string; dimension_type: string; dimension_key: string; affinity_score: number; positive_signal_count?: number; negative_signal_count?: number; last_signal_at?: string | null; model_version: string; [key: string]: unknown; };
+        Update: { affinity_score?: number; positive_signal_count?: number; negative_signal_count?: number; last_signal_at?: string | null; model_version?: string; [key: string]: unknown; }; Relationships: [];
+      };
+      morning_brief_scores: {
+        Row: { id: string; user_id: string; article_id: string | null; story_cluster_id: string | null; portfolio_relevance: number; learned_preference: number; importance_score: number; explicit_interest: number; freshness_score: number; source_fit: number; liked_similarity: number; novelty_score: number; exploration_score: number; final_score: number; score_explanation_json: Record<string, unknown>; algorithm_version: string; created_at: string; [key: string]: unknown; };
+        Insert: { id?: string; user_id: string; article_id?: string | null; story_cluster_id?: string | null; portfolio_relevance?: number; learned_preference?: number; importance_score?: number; explicit_interest?: number; freshness_score?: number; source_fit?: number; liked_similarity?: number; novelty_score?: number; exploration_score?: number; final_score: number; score_explanation_json?: Record<string, unknown>; algorithm_version: string; [key: string]: unknown; };
+        Update: never; Relationships: [];
+      };
+      morning_briefs: {
+        Row: { id: string; user_id: string; brief_date: string; brief_version: number; generated_at: string; status: "generating" | "ready" | "failed" | "archived"; summary_text: string | null; algorithm_version: string; classification_version: string | null; estimated_read_minutes: number | null; metadata_json: Record<string, unknown>; created_at: string; updated_at: string; [key: string]: unknown; };
+        Insert: { id?: string; user_id: string; brief_date: string; brief_version?: number; generated_at?: string; status?: "generating" | "ready" | "failed" | "archived"; summary_text?: string | null; algorithm_version: string; classification_version?: string | null; estimated_read_minutes?: number | null; metadata_json?: Record<string, unknown>; [key: string]: unknown; };
+        Update: { status?: "generating" | "ready" | "failed" | "archived"; summary_text?: string | null; classification_version?: string | null; estimated_read_minutes?: number | null; metadata_json?: Record<string, unknown>; [key: string]: unknown; }; Relationships: [];
+      };
+      morning_brief_items: {
+        Row: { id: string; brief_id: string; story_cluster_id: string | null; article_id: string | null; section: MorningBriefSection; rank: number; score: number | null; score_explanation_json: Record<string, unknown> | null; created_at: string; [key: string]: unknown; };
+        Insert: { id?: string; brief_id: string; story_cluster_id?: string | null; article_id?: string | null; section: MorningBriefSection; rank: number; score?: number | null; score_explanation_json?: Record<string, unknown> | null; [key: string]: unknown; };
+        Update: never; Relationships: [];
       };
       kide_agent_devices: {
         Row: { id: string; user_id: string; name: string; token_hash: string; created_at: string; last_seen_at: string | null; revoked_at: string | null; [key: string]: unknown; };

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { StoryDetail } from "@/components/morning-brief/StoryDetail";
-import { getMockStory, getRelatedStories } from "@/components/morning-brief/mock-data";
+import { getMorningBriefStoryForUser } from "@/lib/morning-brief/queries";
+import { recordMorningBriefOpen } from "@/lib/actions/morning-brief";
 
-export default async function MorningBriefStoryPage({ params }: { params: Promise<{ id: string }> }) { const { id } = await params; const story = getMockStory(id); if (!story) notFound(); return <StoryDetail story={story} relatedStories={getRelatedStories(id)} />; }
+export default async function MorningBriefStoryPage({ params }: { params: Promise<{ id: string }> }) { const { id } = await params; const result = await getMorningBriefStoryForUser(id); if (!result) notFound(); await recordMorningBriefOpen(id); return <StoryDetail story={result.story} relatedStories={result.relatedStories} />; }

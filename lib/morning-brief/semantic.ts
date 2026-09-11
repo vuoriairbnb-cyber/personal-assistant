@@ -1,0 +1,17 @@
+export const SEMANTIC_PROFILE_VERSION = "semantic-profile-v1";
+export const SEMANTIC_SEED_WEIGHTS = { import: 2, like: 1, save: 0.25 } as const;
+export const SEMANTIC_HALF_LIFE_DAYS = 180;
+export type SemanticIntent = keyof typeof SEMANTIC_SEED_WEIGHTS;
+export type SemanticEvent = { storyId: string; eventType: "import" | "like" | "unlike" | "save" | "unsave" | string; createdAt: string };
+export type SemanticSeed = { storyId: string; vector: number[]; weight: number; createdAt: string; intent: SemanticIntent };
+export type SemanticProfile = { vector: number[]; seedCount: number; confidence: number };
+
+const clamp = (value: number) => Math.max(0, Math.min(100, value));
+export const semanticEventsForUser = <T extends SemanticEvent & { userId: string }>(events: T[], userId: string) => events.filter((event) => event.userId === userId);
+export function cosineSimilarity(left: number[], right: number[]) { if (!left.length || left.length !== right.length) return null; let dot = 0; let leftNorm = 0; let rightNorm = 0; for (let index = 0; index < left.length; index += 1) { dot += left[index]! * right[index]!; leftNorm += left[index]! ** 2; rightNorm += right[index]! ** 2; } return leftNorm && rightNorm ? dot / Math.sqrt(leftNorm * rightNorm) : null; }
+export function semanticSeedIntent(events: SemanticEvent[]): SemanticIntent | null { let liked = false; let saved = false; let imported = false; for (const event of [...events].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())) { if (event.eventType === "import") imported = true; if (event.eventType === "like") liked = true; if (event.eventType === "unlike") liked = false; if (event.eventType === "save") saved = true; if (event.eventType === "unsave") saved = false; } if (imported) return "import"; if (liked) return "like"; return saved ? "save" : null; }
+export function semanticSeedWeight(intent: SemanticIntent, createdAt: string, now: Date) { const ageDays = Math.max(0, (now.getTime() - new Date(createdAt).getTime()) / 86_400_000); return SEMANTIC_SEED_WEIGHTS[intent] * Math.pow(0.5, ageDays / SEMANTIC_HALF_LIFE_DAYS); }
+export function buildSemanticProfile(seeds: SemanticSeed[]): SemanticProfile | null { if (!seeds.length) return null; const dimensions = seeds[0]!.vector.length; if (!dimensions || seeds.some((seed) => seed.vector.length !== dimensions || seed.weight <= 0)) return null; const total = seeds.reduce((sum, seed) => sum + seed.weight, 0); const vector = Array.from({ length: dimensions }, (_, index) => seeds.reduce((sum, seed) => sum + seed.vector[index]! * seed.weight, 0) / total); const normalizedLength = Math.sqrt(vector.reduce((sum, value) => sum + value ** 2, 0)); if (!normalizedLength) return null; return { vector: vector.map((value) => value / normalizedLength), seedCount: seeds.length, confidence: Math.min(1, 0.55 + (seeds.length - 1) * 0.225) };
+}
+/** The neutral point is cosine 0. Values are damped when seed evidence is thin. */
+export function likedSimilarityFromProfile(profile: SemanticProfile | null, candidate: number[] | null) { if (!profile || !candidate) return { rawCosineSimilarity: null, likedSimilarity: 50, confidence: 0 }; const cosine = cosineSimilarity(profile.vector, candidate); if (cosine === null) return { rawCosineSimilarity: null, likedSimilarity: 50, confidence: 0 }; const undamped = clamp(50 + cosine * 35); return { rawCosineSimilarity: cosine, likedSimilarity: clamp(50 + (undamped - 50) * profile.confidence), confidence: profile.confidence }; }

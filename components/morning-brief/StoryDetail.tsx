@@ -16,7 +16,7 @@ const contentTypeLabel: Record<StoryCoverage["contentType"], string> = {
 export function StoryDetail({ story, relatedStories }: { story: MorningBriefStory; relatedStories: MorningBriefStory[] }) {
   const briefing = getStoryBriefing(story);
   const coverage: StoryCoverage[] = [
-    { source: story.source, title: `Mock primary coverage: ${story.title}`, contentType: "news", publishedLabel: story.publishedLabel, url: story.sourceUrl },
+    { source: story.source, title: `Primary coverage: ${story.title}`, contentType: "news", publishedLabel: story.publishedLabel, url: story.sourceUrl },
     ...story.relatedCoverage,
   ];
 
@@ -24,7 +24,7 @@ export function StoryDetail({ story, relatedStories }: { story: MorningBriefStor
     <article className="mx-auto max-w-4xl pb-10">
       <div className="flex items-center justify-between gap-4">
         <Link href="/morning-brief" className="inline-flex min-h-10 items-center gap-1 text-sm font-medium no-underline hover:text-accent-active"><ArrowLeft size={16} />Back to Morning Brief</Link>
-        <StoryActions />
+        <StoryActions storyId={story.id} persistable={Boolean(story.id.match(/^[0-9a-f]{8}-[0-9a-f-]{27}$/i))} initialLiked={story.liked} initialSaved={story.saved} />
       </div>
 
       <div className="mt-5"><StoryImage imageUrl={story.imageUrl} imageAlt={story.imageAlt} label={story.imageLabel} tone={story.imageTone} featured /></div>

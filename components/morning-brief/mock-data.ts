@@ -1,3 +1,5 @@
+import type { StoryBriefing } from "@/lib/morning-brief/types";
+
 // UI mock only.
 // In production imageUrl should come from permitted source article metadata
 // or another usable article inside the story cluster.
@@ -7,13 +9,13 @@ export type StoryTone = "violet" | "green" | "sand" | "blue" | "rose";
 export type CoverageContentType = "news" | "analysis" | "local-perspective";
 
 export type StoryCoverage = { source: string; title: string; contentType: CoverageContentType; publishedLabel: string; url?: string };
-export type StoryBriefing = { paragraphs: string[]; whyItMatters: string; keyTakeaways: string[]; exposurePath?: string[]; generatedFromArticleIds?: string[]; generatedAt?: string; generationVersion?: string };
+export type { StoryBriefing } from "@/lib/morning-brief/types";
 export type MorningBriefStory = {
   id: string; rank?: number; title: string; source: string; sourceUrl?: string; publishedLabel: string; estimatedReadTime: string;
   summary: string; category: string; tags: string[];
   /** Resolved by the future clustering layer: primary article image, then same-cluster image, then null for category fallback. */
   imageUrl: string | null; imageAlt?: string | null; imageSource?: string | null; imageTone: StoryTone; imageLabel: string;
-  briefing?: StoryBriefing; isNew?: boolean; isUpdated?: boolean; relatedCoverage: StoryCoverage[];
+  briefing?: StoryBriefing; isNew?: boolean; isUpdated?: boolean; liked?: boolean; saved?: boolean; importedAt?: string; importStatus?: "completed"; relatedCoverage: StoryCoverage[];
 };
 
 const mockUrl = (slug: string) => `https://example.com/morning-brief/mock/${slug}`;
