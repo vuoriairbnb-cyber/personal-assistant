@@ -5,5 +5,5 @@ export const metadata = { title: "Morning Brief — Personal Assistant" };
 
 export default async function MorningBriefPage() {
   const persisted = await getMorningBriefForUser();
-  return <MorningBriefDashboard persisted={persisted?.sections ?? null} development={process.env.NODE_ENV === "development"} />;
+  return <MorningBriefDashboard persisted={persisted?.sections ?? null} />;
 }
