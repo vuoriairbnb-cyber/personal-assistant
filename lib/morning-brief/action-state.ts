@@ -5,6 +5,6 @@ export async function runWithLoading<T>(setLoading: (value: boolean) => void, ac
 }
 
 export function formatIngestionSummary(sources: SourceIngestionSummary[]) {
-  const details = sources.map((source) => source.error ? `${source.source}: ${source.error}` : `${source.source}: ${source.new} new, ${source.duplicates} duplicates`).join(" · ");
+  const details = sources.map((source) => source.error ? `${source.source}: ${source.error}` : `${source.source}: ${source.fetched} fetched, ${source.new} new, ${source.duplicates} duplicates`).join(" · ");
   return sources.some((source) => source.failed > 0) ? `Live source fetch partially failed. ${details}` : details;
 }

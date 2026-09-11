@@ -6,15 +6,20 @@ import { canRecordStoryOpen, FEEDBACK_STRENGTH } from "@/lib/morning-brief/learn
 import { applyMorningBriefLearningSignal } from "@/lib/morning-brief/feedback-service";
 import { importMorningBriefUrl } from "@/lib/morning-brief/import-service";
 import { shouldApplyImportSignal } from "@/lib/morning-brief/import-dedup";
-import { ingestMorningBriefSources } from "@/lib/morning-brief/ingestion";
+import { getMorningBriefPendingArticleCount, ingestMorningBriefSources, processMorningBriefPendingBatch } from "@/lib/morning-brief/ingestion";
 
 export async function regenerateMockMorningBrief() {
-  try { const { user } = await requireApprovedUser(); await generateMockMorningBriefForUser(user.id, new Date()); revalidatePath("/morning-brief"); return { ok: true }; } catch { return { ok: false, error: "Could not regenerate the Morning Brief." }; }
+  try { const { user } = await requireApprovedUser(); if (await getMorningBriefPendingArticleCount()) return { ok: false, error: "Finish live article processing before regenerating Morning Brief." }; await generateMockMorningBriefForUser(user.id, new Date()); revalidatePath("/morning-brief"); return { ok: true }; } catch { return { ok: false, error: "Could not regenerate the Morning Brief." }; }
 }
 
 /** Manual, authenticated ingestion. Scheduling remains intentionally out of scope. */
 export async function fetchLiveMorningBriefSources() {
   try { await requireApprovedUser(); return { ok: true, summary: await ingestMorningBriefSources() }; } catch (error) { console.warn("[morning-brief] manual ingestion action failed", { error: error instanceof Error ? error.message.slice(0, 180) : "Unknown error" }); return { ok: false, error: "Could not fetch live open sources. Please try again." }; }
+}
+
+/** One protected, resumable AI-processing request. The browser calls batches sequentially. */
+export async function processMorningBriefPendingBatchAction() {
+  try { await requireApprovedUser(); return { ok: true, summary: await processMorningBriefPendingBatch() }; } catch (error) { console.warn("[morning-brief] pending batch action failed", { error: error instanceof Error ? error.message.slice(0, 180) : "Unknown error" }); return { ok: false, error: "Could not process the next Morning Brief batch." }; }
 }
 
 type UserFeedbackEvent = Exclude<keyof typeof FEEDBACK_STRENGTH, "import"> | "unlike" | "unsave";

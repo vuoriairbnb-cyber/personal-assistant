@@ -17,6 +17,11 @@ export const LIVE_INGESTION_CANDIDATE_LIMITS = {
 export const LIVE_SOURCE_FETCH_TIMEOUT_MS = 12_000;
 export const LIVE_AI_TIMEOUT_MS = 20_000;
 export const LIVE_INGESTION_CONCURRENCY = 2;
+/** One resumable request processes at most this many articles. */
+export const LIVE_PENDING_BATCH_SIZE = 3;
+/** Keeps a Luna → Terra → embedding path comfortably below the Vercel limit. */
+export const LIVE_PENDING_AI_TIMEOUT_MS = 8_000;
+export const LIVE_PENDING_SCAN_LIMIT = 100;
 
 /** Exact public endpoints verified from the publishers' own RSS/news pages. */
 export const MORNING_BRIEF_FEEDS: readonly MorningBriefFeedConfig[] = [
