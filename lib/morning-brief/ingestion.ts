@@ -98,7 +98,7 @@ async function persistClassification(db: SupabaseClient<Database>, pending: Pend
   if (error) throw error;
   const { error: metadataError } = await db.from("morning_brief_articles").update({ raw_metadata_json: { ...metadata(pending.article), classified_input_hash: classificationInputHash(pending.candidate) } }).eq("id", pending.article.id);
   if (metadataError) throw metadataError;
-  return classified.modelsUsed;
+  return { modelsUsed: classified.modelsUsed, escalationReason: classified.escalationReason };
 }
 
 export type IngestMorningBriefSourcesOptions = { sources?: readonly MorningBriefSourceAdapter[]; now?: Date; db?: SupabaseClient<Database> };
@@ -122,13 +122,13 @@ export async function ingestMorningBriefSources({ sources = MORNING_BRIEF_SOURCE
 }
 
 export async function processMorningBriefPendingBatch(db: SupabaseClient<Database> = createServiceSupabaseClient()) {
-  const pending = await listPendingArticles(db); const batch = selectMorningBriefPendingBatch(pending, LIVE_PENDING_BATCH_SIZE); if (!batch.length) return { attempted: 0, processed: 0, failed: 0, remaining: 0, luna: 0, terra: 0, embedded: 0, errors: [] as string[] };
-  let failed = 0; let luna = 0; let terra = 0; const errors: string[] = [];
-  const classificationReady = await mapBounded(batch.filter((item) => item.needsClassification), LIVE_PENDING_BATCH_SIZE, async (item) => {
-    try { const models = await persistClassification(db, item); luna += models.filter((model) => model.includes("luna")).length; terra += models.filter((model) => model.includes("terra")).length; return item.article.id; }
+  const pending = await listPendingArticles(db); const batch = selectMorningBriefPendingBatch(pending, LIVE_PENDING_BATCH_SIZE); if (!batch.length) return { attempted: 0, processed: 0, failed: 0, remaining: 0, luna: 0, lunaAccepted: 0, terra: 0, terraEscalationPercentage: 0, escalationReasons: { low_confidence: 0, invalid_structure: 0, important_uncertain: 0, other: 0 }, embedded: 0, errors: [] as string[] };
+  const classificationWork = batch.filter((item) => item.needsClassification); let failed = 0; const luna = classificationWork.length; let lunaAccepted = 0; let terra = 0; const escalationReasons = { low_confidence: 0, invalid_structure: 0, important_uncertain: 0, other: 0 }; const errors: string[] = [];
+  const classificationReady = await mapBounded(classificationWork, LIVE_PENDING_BATCH_SIZE, async (item) => {
+    try { const result = await persistClassification(db, item); if (result.escalationReason) escalationReasons[result.escalationReason] += 1; else lunaAccepted += 1; terra += result.modelsUsed.filter((model) => model.includes("terra")).length; return item.article.id; }
     catch (error) { failed += 1; errors.push(safeError(error)); console.warn("[morning-brief] pending classification failed", { articleId: item.article.id, error: safeError(error) }); return null; }
   });
-  const classificationFailed = new Set(batch.filter((item) => item.needsClassification).map((item) => item.article.id).filter((id) => !classificationReady.includes(id)));
+  const classificationFailed = new Set(classificationWork.map((item) => item.article.id).filter((id) => !classificationReady.includes(id)));
   const embeddingIds = batch.filter((item) => !classificationFailed.has(item.article.id)).map((item) => item.article.id);
   let embedded = 0;
   if (embeddingIds.length) {
@@ -136,5 +136,5 @@ export async function processMorningBriefPendingBatch(db: SupabaseClient<Databas
     const missing = embeddingIds.filter((id) => !vectors.has(id)); if (missing.length) { failed += missing.length; errors.push("Embedding was unavailable for one or more articles."); }
   }
   const remainingPending = await listPendingArticles(db); const remainingIds = new Set(remainingPending.map((item) => item.article.id)); const processed = batch.filter((item) => !remainingIds.has(item.article.id)).length;
-  return { attempted: batch.length, processed, failed, remaining: remainingPending.length, luna, terra, embedded, errors };
+  return { attempted: batch.length, processed, failed, remaining: remainingPending.length, luna, lunaAccepted, terra, terraEscalationPercentage: luna ? Number(((terra / luna) * 100).toFixed(1)) : 0, escalationReasons, embedded, errors };
 }
