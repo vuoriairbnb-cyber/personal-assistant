@@ -2,6 +2,7 @@ import type { MorningBriefSection } from "./taxonomy";
 import type { RankedStoryCluster } from "./clustering";
 
 export const TOP_FIVE_CONFIG = { limit: 5, qualityFloor: 48, maxMustConsiderOverrides: 2, representationBonus: 4 } as const;
+export type TopFiveConfig = { limit: number; qualityFloor: number; maxMustConsiderOverrides: number; representationBonus: number };
 export type SelectionEntry = { cluster: RankedStoryCluster; adjustedScore: number; reason: string };
 export type SelectionResult = { selected: SelectionEntry[]; excluded: Array<{ cluster: RankedStoryCluster; reason: string }> };
 const includes = (values: string[], words: string[]) => values.some((value) => words.some((word) => value.toLowerCase().includes(word)));
@@ -19,7 +20,7 @@ function adjustment(story: RankedStoryCluster, selected: SelectionEntry[]) {
   return { adjustedScore: story.score.finalScore - penalties + bonus, reason: penalties ? `Selected after diversity penalty (${penalties.toFixed(0)})` : bonus ? "Selected with a soft unrepresented-lens bonus" : "Highest remaining quality-adjusted story" };
 }
 
-export function selectTopFive(stories: RankedStoryCluster[], config = TOP_FIVE_CONFIG): SelectionResult {
+export function selectTopFive(stories: RankedStoryCluster[], config: TopFiveConfig = TOP_FIVE_CONFIG): SelectionResult {
   const candidates = [...stories].sort((a, b) => b.score.finalScore - a.score.finalScore || a.id.localeCompare(b.id));
   const selected: SelectionEntry[] = []; const excluded: SelectionResult["excluded"] = [];
   while (selected.length < config.limit) {

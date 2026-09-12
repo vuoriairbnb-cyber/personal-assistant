@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { fetchLiveMorningBriefSources, processMorningBriefPendingBatchAction, regenerateMockMorningBrief } from "@/lib/actions/morning-brief";
+import { fetchLiveMorningBriefSources, processMorningBriefPendingBatchAction, regenerateMorningBrief } from "@/lib/actions/morning-brief";
 import { formatIngestionSummary } from "@/lib/morning-brief/action-state";
 import { canRegenerateMorningBrief } from "@/lib/morning-brief/pending-pipeline";
 
@@ -41,7 +41,7 @@ export function MockBriefGenerator() {
 
   const regenerate = async () => {
     setRegenerating(true); setMessage(null);
-    try { const result = await regenerateMockMorningBrief(); if (result.ok) window.location.reload(); else setMessage(result.error ?? "Could not regenerate the Morning Brief."); } catch { setMessage("Could not regenerate the Morning Brief."); } finally { setRegenerating(false); }
+    try { const result = await regenerateMorningBrief(); if (result.ok) window.location.reload(); else setMessage(result.error ?? "Could not regenerate the Morning Brief."); } catch { setMessage("Could not regenerate the Morning Brief."); } finally { setRegenerating(false); }
   };
 
   const resume = async () => { if (progress?.remaining) await processPending(progress.remaining); };

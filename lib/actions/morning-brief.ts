@@ -1,15 +1,15 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { requireApprovedUser } from "@/lib/auth/guard";
-import { generateMockMorningBriefForUser } from "@/lib/morning-brief/generation";
+import { generateMorningBriefForUser } from "@/lib/morning-brief/generation";
 import { canRecordStoryOpen, FEEDBACK_STRENGTH } from "@/lib/morning-brief/learning";
 import { applyMorningBriefLearningSignal } from "@/lib/morning-brief/feedback-service";
 import { importMorningBriefUrl } from "@/lib/morning-brief/import-service";
 import { shouldApplyImportSignal } from "@/lib/morning-brief/import-dedup";
 import { getMorningBriefPendingArticleCount, ingestMorningBriefSources, processMorningBriefPendingBatch } from "@/lib/morning-brief/ingestion";
 
-export async function regenerateMockMorningBrief() {
-  try { const { user } = await requireApprovedUser(); if (await getMorningBriefPendingArticleCount()) return { ok: false, error: "Finish live article processing before regenerating Morning Brief." }; await generateMockMorningBriefForUser(user.id, new Date()); revalidatePath("/morning-brief"); return { ok: true }; } catch { return { ok: false, error: "Could not regenerate the Morning Brief." }; }
+export async function regenerateMorningBrief() {
+  try { const { user } = await requireApprovedUser(); if (await getMorningBriefPendingArticleCount()) return { ok: false, error: "Finish live article processing before regenerating Morning Brief." }; await generateMorningBriefForUser(user.id, { mode: "live", now: new Date() }); revalidatePath("/morning-brief"); return { ok: true }; } catch { return { ok: false, error: "Could not regenerate the Morning Brief." }; }
 }
 
 /** Manual, authenticated ingestion. Scheduling remains intentionally out of scope. */
