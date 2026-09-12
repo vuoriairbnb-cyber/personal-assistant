@@ -19,9 +19,16 @@ type LiveArticle = Database["public"]["Tables"]["morning_brief_articles"]["Row"]
 type LiveClassification = Database["public"]["Tables"]["morning_brief_article_classifications"]["Row"];
 type PendingArticle = { article: LiveArticle; candidate: SourceCandidate; needsClassification: boolean };
 type PersistedCandidate = "new" | "duplicate" | "updated" | "skipped";
+export type MorningBriefClassificationDiagnostic = {
+  headline: string;
+  source: string;
+  luna: Pick<LiveClassification, "confidence" | "significance" | "consequence" | "scope"> | null;
+  escalationReason: "low_confidence" | "invalid_structure" | "important_uncertain" | "other" | null;
+  finalTerraConfidence: number | null;
+};
 
 const sourceMetadata = (slug: SourceCandidate["sourceSlug"]) => ({ live_public_source: true, source_slug: slug });
-const emptySummary = (source: string): SourceIngestionSummary => ({ source, fetched: 0, parsed: 0, considered: 0, filtered: 0, new: 0, duplicates: 0, classified: 0, reusedClassifications: 0, embedded: 0, reusedEmbeddings: 0, failed: 0 });
+const emptySummary = (source: string): SourceIngestionSummary => ({ source, fetched: 0, parsed: 0, considered: 0, filtered: 0, invalid: 0, stale: 0, outsideBatchLimit: 0, skipped: 0, new: 0, duplicates: 0, classified: 0, reusedClassifications: 0, embedded: 0, reusedEmbeddings: 0, failed: 0 });
 const safeError = (error: unknown) => error instanceof Error ? error.message.slice(0, 180) : "Unknown error";
 const metadata = (article: LiveArticle) => article.raw_metadata_json as Record<string, unknown>;
 const stringArray = (value: unknown) => Array.isArray(value) && value.every((item) => typeof item === "string") ? value : [];
@@ -98,7 +105,20 @@ async function persistClassification(db: SupabaseClient<Database>, pending: Pend
   if (error) throw error;
   const { error: metadataError } = await db.from("morning_brief_articles").update({ raw_metadata_json: { ...metadata(pending.article), classified_input_hash: classificationInputHash(pending.candidate) } }).eq("id", pending.article.id);
   if (metadataError) throw metadataError;
-  return { modelsUsed: classified.modelsUsed, escalationReason: classified.escalationReason };
+  const luna = classified.lunaFirstPass ? {
+    confidence: classified.lunaFirstPass.confidence,
+    significance: classified.lunaFirstPass.significance,
+    consequence: classified.lunaFirstPass.consequence,
+    scope: classified.lunaFirstPass.scope,
+  } : null;
+  const diagnostic: MorningBriefClassificationDiagnostic = {
+    headline: pending.candidate.title,
+    source: pending.candidate.sourceSlug,
+    luna,
+    escalationReason: classified.escalationReason,
+    finalTerraConfidence: classified.escalationReason ? classified.data.confidence : null,
+  };
+  return { modelsUsed: classified.modelsUsed, escalationReason: classified.escalationReason, diagnostic };
 }
 
 export type IngestMorningBriefSourcesOptions = { sources?: readonly MorningBriefSourceAdapter[]; now?: Date; db?: SupabaseClient<Database> };
@@ -107,14 +127,26 @@ export async function ingestMorningBriefSources({ sources = MORNING_BRIEF_SOURCE
   const startedAt = Date.now(); const sourceIds = await ensureLiveSources(db); const cutoff = now.getTime() - 48 * 3_600_000;
   const prepared = await Promise.all(sources.map(async (source) => {
     const summary = emptySummary(source.sourceSlug);
-    try { const candidates = await source.fetchCandidates(); summary.fetched = candidates.length; const recent = candidates.filter((candidate) => Number.isFinite(Date.parse(candidate.publishedAt)) && Date.parse(candidate.publishedAt) >= cutoff); summary.parsed = recent.length; const limited = recent.slice(0, LIVE_INGESTION_CANDIDATE_LIMITS[source.sourceSlug]); summary.considered = limited.length; summary.filtered = recent.length - limited.length; return { source, summary, candidates: limited }; }
+    try {
+      const candidates = await source.fetchCandidates(); summary.fetched = candidates.length;
+      const dated = candidates.filter((candidate) => Number.isFinite(Date.parse(candidate.publishedAt)));
+      summary.invalid = candidates.length - dated.length;
+      const recent = dated.filter((candidate) => Date.parse(candidate.publishedAt) >= cutoff);
+      summary.stale = dated.length - recent.length;
+      summary.parsed = recent.length;
+      const limited = recent.slice(0, LIVE_INGESTION_CANDIDATE_LIMITS[source.sourceSlug]);
+      summary.considered = limited.length;
+      summary.outsideBatchLimit = recent.length - limited.length;
+      summary.filtered = summary.invalid + summary.stale + summary.outsideBatchLimit;
+      return { source, summary, candidates: limited };
+    }
     catch (error) { summary.failed += 1; summary.error = safeError(error); console.warn("[morning-brief] live source failed", { source: source.sourceSlug, error: summary.error }); return { source, summary, candidates: [] as SourceCandidate[] }; }
   }));
   for (const item of prepared) {
     const sourceId = sourceIds.get(item.source.sourceSlug); if (!sourceId) { item.summary.failed += 1; item.summary.error = "Live source was not configured."; continue; }
     for (const candidate of item.candidates) try {
       const status = await persistCandidate(db, sourceId, candidate, item.summary, item.summary.new < LIVE_INGESTION_BATCH_LIMITS[item.source.sourceSlug]);
-      if (status === "skipped") item.summary.filtered += 1;
+      if (status === "skipped") item.summary.skipped += 1;
     } catch (error) { item.summary.failed += 1; console.warn("[morning-brief] live candidate persistence failed", { source: item.source.sourceSlug, error: safeError(error) }); }
   }
   const pending = await listPendingArticles(db); const sourcesSummary = prepared.map((item) => item.summary); const result = { sources: sourcesSummary, pending: pending.length, durationMs: Date.now() - startedAt, partialFailure: sourcesSummary.some((summary) => summary.failed > 0) };
@@ -122,10 +154,11 @@ export async function ingestMorningBriefSources({ sources = MORNING_BRIEF_SOURCE
 }
 
 export async function processMorningBriefPendingBatch(db: SupabaseClient<Database> = createServiceSupabaseClient()) {
-  const pending = await listPendingArticles(db); const batch = selectMorningBriefPendingBatch(pending, LIVE_PENDING_BATCH_SIZE); if (!batch.length) return { attempted: 0, processed: 0, failed: 0, remaining: 0, luna: 0, lunaAccepted: 0, terra: 0, terraEscalationPercentage: 0, escalationReasons: { low_confidence: 0, invalid_structure: 0, important_uncertain: 0, other: 0 }, embedded: 0, errors: [] as string[] };
+  const pending = await listPendingArticles(db); const batch = selectMorningBriefPendingBatch(pending, LIVE_PENDING_BATCH_SIZE); if (!batch.length) return { attempted: 0, processed: 0, failed: 0, remaining: 0, luna: 0, lunaAccepted: 0, terra: 0, terraEscalationPercentage: 0, escalationReasons: { low_confidence: 0, invalid_structure: 0, important_uncertain: 0, other: 0 }, classificationDiagnostics: [] as MorningBriefClassificationDiagnostic[], embedded: 0, errors: [] as string[] };
   const classificationWork = batch.filter((item) => item.needsClassification); let failed = 0; const luna = classificationWork.length; let lunaAccepted = 0; let terra = 0; const escalationReasons = { low_confidence: 0, invalid_structure: 0, important_uncertain: 0, other: 0 }; const errors: string[] = [];
+  const classificationDiagnostics: MorningBriefClassificationDiagnostic[] = [];
   const classificationReady = await mapBounded(classificationWork, LIVE_PENDING_BATCH_SIZE, async (item) => {
-    try { const result = await persistClassification(db, item); if (result.escalationReason) escalationReasons[result.escalationReason] += 1; else lunaAccepted += 1; terra += result.modelsUsed.filter((model) => model.includes("terra")).length; return item.article.id; }
+    try { const result = await persistClassification(db, item); classificationDiagnostics.push(result.diagnostic); if (result.escalationReason) escalationReasons[result.escalationReason] += 1; else lunaAccepted += 1; terra += result.modelsUsed.filter((model) => model.includes("terra")).length; return item.article.id; }
     catch (error) { failed += 1; errors.push(safeError(error)); console.warn("[morning-brief] pending classification failed", { articleId: item.article.id, error: safeError(error) }); return null; }
   });
   const classificationFailed = new Set(classificationWork.map((item) => item.article.id).filter((id) => !classificationReady.includes(id)));
@@ -136,5 +169,5 @@ export async function processMorningBriefPendingBatch(db: SupabaseClient<Databas
     const missing = embeddingIds.filter((id) => !vectors.has(id)); if (missing.length) { failed += missing.length; errors.push("Embedding was unavailable for one or more articles."); }
   }
   const remainingPending = await listPendingArticles(db); const remainingIds = new Set(remainingPending.map((item) => item.article.id)); const processed = batch.filter((item) => !remainingIds.has(item.article.id)).length;
-  return { attempted: batch.length, processed, failed, remaining: remainingPending.length, luna, lunaAccepted, terra, terraEscalationPercentage: luna ? Number(((terra / luna) * 100).toFixed(1)) : 0, escalationReasons, embedded, errors };
+  return { attempted: batch.length, processed, failed, remaining: remainingPending.length, luna, lunaAccepted, terra, terraEscalationPercentage: luna ? Number(((terra / luna) * 100).toFixed(1)) : 0, escalationReasons, classificationDiagnostics, embedded, errors };
 }

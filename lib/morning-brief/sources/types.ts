@@ -41,6 +41,14 @@ export type SourceIngestionSummary = {
   parsed: number;
   considered: number;
   filtered: number;
+  /** Candidates with an unusable publication timestamp. */
+  invalid: number;
+  /** Valid but older than the live-ingestion recency window. */
+  stale: number;
+  /** Recent candidates omitted before persistence because of the source scan cap. */
+  outsideBatchLimit: number;
+  /** Eligible candidates not inserted because the per-source new-item cap was reached. */
+  skipped: number;
   new: number;
   duplicates: number;
   classified: number;
