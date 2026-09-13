@@ -8,7 +8,7 @@ test("candidate limits are deterministic and bounded workers preserve item order
 });
 
 test("production live-ingestion limits are intentionally small", () => {
-  assert.deepEqual(LIVE_INGESTION_BATCH_LIMITS, { yle: 10, "bank-of-finland": 5, ecb: 5 });
-  assert.deepEqual(LIVE_INGESTION_CANDIDATE_LIMITS, { yle: 30, "bank-of-finland": 15, ecb: 15 });
+  assert.deepEqual(LIVE_INGESTION_BATCH_LIMITS, { yle: 10, "bank-of-finland": 5, ecb: 5, "pyn-elite": 4, "vietnam-statistics": 3, "federal-reserve": 5, eurostat: 4 });
+  assert.deepEqual(LIVE_INGESTION_CANDIDATE_LIMITS, { yle: 30, "bank-of-finland": 15, ecb: 15, "pyn-elite": 12, "vietnam-statistics": 8, "federal-reserve": 15, eurostat: 10 });
   assert.equal(LIVE_INGESTION_CONCURRENCY, 2);
 });

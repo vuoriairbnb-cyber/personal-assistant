@@ -18,7 +18,7 @@ export type SourceCandidate = {
 
 export type MorningBriefFeedConfig = {
   id: string;
-  sourceSlug: "yle" | "bank-of-finland" | "ecb";
+  sourceSlug: string;
   sourceName: string;
   sourceType: "rss" | "official";
   url: string;
@@ -31,7 +31,7 @@ export type MorningBriefFeedConfig = {
 export type SourceFetch = (input: string, init?: RequestInit) => Promise<Response>;
 
 export interface MorningBriefSourceAdapter {
-  readonly sourceSlug: MorningBriefFeedConfig["sourceSlug"];
+  readonly sourceSlug: string;
   fetchCandidates(fetcher?: SourceFetch): Promise<SourceCandidate[]>;
 }
 

@@ -34,7 +34,8 @@ const emptySummary = (source: string): SourceIngestionSummary => ({ source, fetc
 const safeError = (error: unknown) => error instanceof Error ? error.message.slice(0, 180) : "Unknown error";
 const metadata = (article: LiveArticle) => article.raw_metadata_json as Record<string, unknown>;
 const stringArray = (value: unknown) => Array.isArray(value) && value.every((item) => typeof item === "string") ? value : [];
-const candidateAsExtracted = (candidate: SourceCandidate): ExtractedArticle => ({ canonicalUrl: candidate.canonicalUrl, title: candidate.title, excerpt: candidate.excerpt, author: candidate.author, publishedAt: candidate.publishedAt, language: candidate.language, imageUrl: candidate.imageUrl, siteName: candidate.sourceSlug === "ecb" ? "European Central Bank" : candidate.sourceSlug === "yle" ? "Yle" : "Bank of Finland", text: "", contentAvailability: candidate.excerpt.length >= 220 ? "partial_text" : "metadata_only" });
+const sourceNames: Record<string, string> = { yle: "Yle", "bank-of-finland": "Bank of Finland", ecb: "European Central Bank", "pyn-elite": "PYN Elite", "vietnam-statistics": "National Statistics Office of Vietnam", "federal-reserve": "Federal Reserve", eurostat: "Eurostat" };
+const candidateAsExtracted = (candidate: SourceCandidate): ExtractedArticle => ({ canonicalUrl: candidate.canonicalUrl, title: candidate.title, excerpt: candidate.excerpt, author: candidate.author, publishedAt: candidate.publishedAt, language: candidate.language, imageUrl: candidate.imageUrl, siteName: sourceNames[candidate.sourceSlug] ?? candidate.sourceSlug, text: "", contentAvailability: candidate.excerpt.length >= 220 ? "partial_text" : "metadata_only" });
 
 function candidateFromArticle(article: LiveArticle): SourceCandidate {
   const raw = metadata(article);
@@ -46,6 +47,10 @@ async function ensureLiveSources(db: SupabaseClient<Database>) {
     { slug: "yle", name: "Yle", base_url: "https://yle.fi", source_type: "rss" as const, default_language: "fi", enabled: true, default_content_type: "news" as const, metadata_json: sourceMetadata("yle") },
     { slug: "bank-of-finland", name: "Bank of Finland", base_url: "https://www.suomenpankki.fi", source_type: "official" as const, default_language: "en", enabled: true, default_content_type: "news" as const, metadata_json: sourceMetadata("bank-of-finland") },
     { slug: "ecb", name: "European Central Bank", base_url: "https://www.ecb.europa.eu", source_type: "rss" as const, default_language: "en", enabled: true, default_content_type: "news" as const, metadata_json: sourceMetadata("ecb") },
+    { slug: "pyn-elite", name: "PYN Elite", base_url: "https://www.pyn.fi", source_type: "official" as const, default_language: "en", enabled: true, default_content_type: "news" as const, metadata_json: { ...sourceMetadata("pyn-elite"), source_family: "portfolio_manager_official", portfolio_lens: "PYN Elite" } },
+    { slug: "vietnam-statistics", name: "National Statistics Office of Vietnam", base_url: "https://www.nso.gov.vn", source_type: "official" as const, default_language: "en", enabled: true, default_content_type: "news" as const, metadata_json: { ...sourceMetadata("vietnam-statistics"), source_family: "official_primary_statistics", country: "Vietnam" } },
+    { slug: "federal-reserve", name: "Federal Reserve", base_url: "https://www.federalreserve.gov", source_type: "rss" as const, default_language: "en", enabled: true, default_content_type: "news" as const, metadata_json: { ...sourceMetadata("federal-reserve"), source_family: "official_primary_policy", country: "United States" } },
+    { slug: "eurostat", name: "Eurostat", base_url: "https://ec.europa.eu/eurostat", source_type: "rss" as const, default_language: "en", enabled: true, default_content_type: "news" as const, metadata_json: { ...sourceMetadata("eurostat"), source_family: "official_primary_statistics", region: "Europe" } },
   ];
   const { data, error } = await db.from("morning_brief_sources").upsert(rows, { onConflict: "slug" }).select("id,slug");
   if (error || !data) throw error ?? new Error("Could not persist live news sources.");
@@ -138,7 +143,7 @@ export async function ingestMorningBriefSources({ sources = MORNING_BRIEF_SOURCE
       const recent = dated.filter((candidate) => Date.parse(candidate.publishedAt) >= cutoff);
       summary.stale = dated.length - recent.length;
       summary.parsed = recent.length;
-      const limited = recent.slice(0, LIVE_INGESTION_CANDIDATE_LIMITS[source.sourceSlug]);
+      const limited = recent.slice(0, LIVE_INGESTION_CANDIDATE_LIMITS[source.sourceSlug] ?? 10);
       summary.considered = limited.length;
       summary.outsideBatchLimit = recent.length - limited.length;
       summary.filtered = summary.invalid + summary.stale + summary.outsideBatchLimit;
@@ -149,7 +154,7 @@ export async function ingestMorningBriefSources({ sources = MORNING_BRIEF_SOURCE
   for (const item of prepared) {
     const sourceId = sourceIds.get(item.source.sourceSlug); if (!sourceId) { item.summary.failed += 1; item.summary.error = "Live source was not configured."; continue; }
     for (const candidate of item.candidates) try {
-      const status = await persistCandidate(db, sourceId, candidate, item.summary, item.summary.new < LIVE_INGESTION_BATCH_LIMITS[item.source.sourceSlug]);
+      const status = await persistCandidate(db, sourceId, candidate, item.summary, item.summary.new < (LIVE_INGESTION_BATCH_LIMITS[item.source.sourceSlug] ?? 3));
       if (status === "skipped") item.summary.skipped += 1;
     } catch (error) { item.summary.failed += 1; console.warn("[morning-brief] live candidate persistence failed", { source: item.source.sourceSlug, error: safeError(error) }); }
   }
