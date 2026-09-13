@@ -12,13 +12,13 @@ export function isRelevantFederalReserveCandidate(candidate: SourceCandidate, fe
 
 export const federalReserveSourceAdapter: MorningBriefSourceAdapter = {
   sourceSlug: "federal-reserve",
+  shouldKeepCandidate: (candidate) => isRelevantFederalReserveCandidate(candidate, typeof candidate.rawMetadata.feed_id === "string" ? candidate.rawMetadata.feed_id : ""),
   async fetchCandidates(fetcher: SourceFetch = fetch) {
     const feeds = MORNING_BRIEF_FEEDS.filter((feed) => feed.sourceSlug === "federal-reserve" && feed.enabled);
     const groups = await Promise.all(feeds.map(async (feed) => {
       const response = await fetchPublicSource(feed.url, { cache: "no-store", headers: { Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml" } }, fetcher);
       if (!response.ok) throw new Error(`Federal Reserve feed unavailable (${response.status}).`);
       return rssCandidates(await response.text(), { sourceSlug: "federal-reserve", language: feed.language, feedUrl: feed.url, maxItems: feed.maxItems })
-        .filter((candidate) => isRelevantFederalReserveCandidate(candidate, feed.id))
         .map((candidate) => ({ ...candidate, rawMetadata: { ...candidate.rawMetadata, source_family: "official_primary_policy", feed_id: feed.id } }));
     }));
     const seen = new Set<string>();

@@ -138,15 +138,17 @@ export async function ingestMorningBriefSources({ sources = MORNING_BRIEF_SOURCE
     const summary = emptySummary(source.sourceSlug);
     try {
       const candidates = await source.fetchCandidates(); summary.fetched = candidates.length;
-      const dated = candidates.filter((candidate) => Number.isFinite(Date.parse(candidate.publishedAt)));
-      summary.invalid = candidates.length - dated.length;
+      const relevant = source.shouldKeepCandidate ? candidates.filter((candidate) => source.shouldKeepCandidate!(candidate)) : candidates;
+      const sourceFiltered = candidates.length - relevant.length;
+      const dated = relevant.filter((candidate) => Number.isFinite(Date.parse(candidate.publishedAt)));
+      summary.invalid = relevant.length - dated.length;
       const recent = dated.filter((candidate) => Date.parse(candidate.publishedAt) >= cutoff);
       summary.stale = dated.length - recent.length;
       summary.parsed = recent.length;
       const limited = recent.slice(0, LIVE_INGESTION_CANDIDATE_LIMITS[source.sourceSlug] ?? 10);
       summary.considered = limited.length;
       summary.outsideBatchLimit = recent.length - limited.length;
-      summary.filtered = summary.invalid + summary.stale + summary.outsideBatchLimit;
+      summary.filtered = sourceFiltered + summary.invalid + summary.stale + summary.outsideBatchLimit;
       return { source, summary, candidates: limited };
     }
     catch (error) { summary.failed += 1; summary.error = safeError(error); console.warn("[morning-brief] live source failed", { source: source.sourceSlug, error: summary.error }); return { source, summary, candidates: [] as SourceCandidate[] }; }

@@ -22,17 +22,20 @@ export function pynContentType(title: string): "monthly_review" | "investor_lett
 /** Parses only public article cards from PYN's own English news index. */
 export function parsePynEliteNewsIndex(html: string, indexUrl: string, maxItems: number): SourceCandidate[] {
   const candidates: SourceCandidate[] = [];
-  for (const match of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
-    const title = decode(match[2] ?? "");
-    if (!title || title.length < 8 || /^(read more|view all|news)$/i.test(title)) continue;
+  for (const match of html.matchAll(/<article\b[^>]*\belementor-post\b[^>]*>([\s\S]*?)<\/article>/gi)) {
+    const article = match[1] ?? "";
+    const titleLink = article.match(/<h[1-6][^>]*\belementor-post__title\b[^>]*>[\s\S]*?<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i);
+    if (!titleLink) continue;
+    const title = decode(titleLink[2] ?? "");
+    if (!title || title.length < 8) continue;
     let canonicalUrl: string;
-    try { canonicalUrl = new URL(match[1]!, indexUrl).toString(); } catch { continue; }
+    try { canonicalUrl = new URL(titleLink[1]!, indexUrl).toString(); } catch { continue; }
     const pathname = new URL(canonicalUrl).pathname;
-    if (!/\/en\/news\//i.test(pathname) || candidates.some((item) => item.canonicalUrl === canonicalUrl)) continue;
-    const nearby = decode(html.slice(Math.max(0, match.index! - 700), match.index! + match[0].length + 500));
-    const publishedAt = dateFromText(nearby); if (!publishedAt) continue;
+    if (!/^\/en\/(?:reviews|blog|investor-letters|news)\//i.test(pathname) || candidates.some((item) => item.canonicalUrl === canonicalUrl)) continue;
+    const excerpt = decode(article.match(/<div[^>]*\belementor-post__excerpt\b[^>]*>([\s\S]*?)<\/div>/i)?.[1] ?? "");
+    const publishedAt = dateFromText(article); if (!publishedAt) continue;
     const contentType = pynContentType(title);
-    candidates.push({ sourceSlug: "pyn-elite", sourceArticleId: hash(canonicalUrl), title, canonicalUrl, excerpt: nearby, publishedAt, categories: [contentType], language: "en", rawMetadata: { listing: "official-public-news-index", source_family: "portfolio_manager_official", portfolio_lens: "PYN Elite", region: /vietnam/i.test(`${title} ${nearby}`) ? "Vietnam" : null, pyn_content_type: contentType } });
+    candidates.push({ sourceSlug: "pyn-elite", sourceArticleId: hash(canonicalUrl), title, canonicalUrl, excerpt, publishedAt, categories: [contentType], language: "en", rawMetadata: { listing: "official-public-news-index", source_family: "portfolio_manager_official", portfolio_lens: "PYN Elite", region: /vietnam/i.test(`${title} ${excerpt}`) ? "Vietnam" : null, pyn_content_type: contentType } });
     if (candidates.length >= maxItems) break;
   }
   return candidates;

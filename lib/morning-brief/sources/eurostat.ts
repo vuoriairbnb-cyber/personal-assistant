@@ -12,13 +12,13 @@ export function isRelevantEurostatCandidate(candidate: SourceCandidate) {
 
 export const eurostatSourceAdapter: MorningBriefSourceAdapter = {
   sourceSlug: "eurostat",
+  shouldKeepCandidate: isRelevantEurostatCandidate,
   async fetchCandidates(fetcher: SourceFetch = fetch) {
     const feeds = MORNING_BRIEF_FEEDS.filter((feed) => feed.sourceSlug === "eurostat" && feed.enabled);
     const groups = await Promise.all(feeds.map(async (feed) => {
       const response = await fetchPublicSource(feed.url, { cache: "no-store", headers: { Accept: "application/atom+xml, application/rss+xml, application/xml, text/xml" } }, fetcher);
       if (!response.ok) throw new Error(`Eurostat feed unavailable (${response.status}).`);
       return rssCandidates(await response.text(), { sourceSlug: "eurostat", language: feed.language, feedUrl: feed.url, maxItems: feed.maxItems })
-        .filter(isRelevantEurostatCandidate)
         .map((candidate) => ({ ...candidate, rawMetadata: { ...candidate.rawMetadata, source_family: "official_primary_statistics", feed_id: feed.id } }));
     }));
     const seen = new Set<string>();

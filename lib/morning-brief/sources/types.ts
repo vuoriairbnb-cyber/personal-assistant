@@ -33,6 +33,8 @@ export type SourceFetch = (input: string, init?: RequestInit) => Promise<Respons
 export interface MorningBriefSourceAdapter {
   readonly sourceSlug: string;
   fetchCandidates(fetcher?: SourceFetch): Promise<SourceCandidate[]>;
+  /** Deterministic source-specific relevance check, run before persistence and AI work. */
+  shouldKeepCandidate?(candidate: SourceCandidate): boolean;
 }
 
 export type SourceIngestionSummary = {

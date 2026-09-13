@@ -6,7 +6,10 @@ const decode = (value: string) => value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "
 const element = (xml: string, name: string) => xml.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${name}>`, "i"))?.[1];
 const all = (xml: string, name: string) => [...xml.matchAll(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${name}>`, "gi"))].map((match) => decode(match[1] ?? "")).filter(Boolean);
 const attribute = (tag: string, name: string) => tag.match(new RegExp(`${name}=["']([^"']+)["']`, "i"))?.[1];
-const validDate = (value: string | undefined) => value && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : undefined;
+const validDate = (value: string | undefined) => {
+  const normalized = value?.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").trim();
+  return normalized && Number.isFinite(Date.parse(normalized)) ? new Date(normalized).toISOString() : undefined;
+};
 const id = (value: string) => createHash("sha256").update(value).digest("hex").slice(0, 48);
 
 function parseItem(block: string, atom: boolean): FeedItem | null {
@@ -19,7 +22,7 @@ function parseItem(block: string, atom: boolean): FeedItem | null {
   const categories = atom ? categoryTags.map((tag) => decode(attribute(tag, "term") ?? "")).filter(Boolean) : all(block, "category");
   const media = [...block.matchAll(/<(?:media:content|media:thumbnail|enclosure)\b[^>]*>/gi)].map((match) => attribute(match[0], "url")).find(Boolean);
   const authorBlock = element(block, "author");
-  return { title, link: linkValue, id: decode(element(block, atom ? "id" : "guid") ?? "") || undefined, description: decode(element(block, atom ? "summary" : "description") ?? element(block, "content") ?? ""), published: validDate(element(block, atom ? "published" : "pubDate")), updated: validDate(element(block, "updated")), author: decode(atom ? element(authorBlock ?? "", "name") ?? "" : element(block, "dc:creator") ?? "") || undefined, categories, imageUrl: media };
+  return { title, link: linkValue, id: decode(element(block, atom ? "id" : "guid") ?? "") || undefined, description: decode(element(block, atom ? "summary" : "description") ?? element(block, "content") ?? ""), published: validDate(element(block, atom ? "published" : "pubDate") || element(block, "dc:date")), updated: validDate(element(block, "updated")), author: decode(atom ? element(authorBlock ?? "", "name") ?? "" : element(block, "dc:creator") ?? "") || undefined, categories, imageUrl: media };
 }
 
 export function parseRssOrAtom(xml: string): FeedItem[] {

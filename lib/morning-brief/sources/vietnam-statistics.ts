@@ -12,11 +12,16 @@ const dateFromText = (value: string) => {
   return day && month && year ? new Date(`${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T12:00:00.000Z`).toISOString() : undefined;
 };
 
-/** Keeps only market-relevant macro releases from the official English NSO press room. */
+/** Deterministic macro relevance filter for the official English NSO press room. */
+export function isRelevantVietnamStatisticsCandidate(candidate: SourceCandidate) {
+  return macroTerms.test(candidate.title);
+}
+
+/** Parses public NSO press-room cards; relevance filtering is performed by the common pipeline. */
 export function parseVietnamStatisticsPressRoom(html: string, indexUrl: string, maxItems: number): SourceCandidate[] {
   const candidates: SourceCandidate[] = [];
   for (const match of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
-    const title = decode(match[2] ?? ""); if (!title || title.length < 12 || !macroTerms.test(title)) continue;
+    const title = decode(match[2] ?? ""); if (!title || title.length < 12) continue;
     let canonicalUrl: string; try { canonicalUrl = new URL(match[1]!, indexUrl).toString(); } catch { continue; }
     if (!/nso\.gov\.vn/i.test(canonicalUrl) || candidates.some((item) => item.canonicalUrl === canonicalUrl)) continue;
     const nearby = decode(html.slice(Math.max(0, match.index! - 650), match.index! + match[0].length + 650)); const publishedAt = dateFromText(nearby); if (!publishedAt) continue;
@@ -28,6 +33,7 @@ export function parseVietnamStatisticsPressRoom(html: string, indexUrl: string, 
 
 export const vietnamStatisticsSourceAdapter: MorningBriefSourceAdapter = {
   sourceSlug: "vietnam-statistics",
+  shouldKeepCandidate: isRelevantVietnamStatisticsCandidate,
   async fetchCandidates(fetcher: SourceFetch = fetch) {
     const feed = MORNING_BRIEF_FEEDS.find((item) => item.id === "vietnam-statistics-press-room");
     if (!feed?.enabled) return [];

@@ -13,6 +13,11 @@ test("parses Atom ids, alternate links, updated dates, authors and category term
   const xml = `<feed><entry><id>ecb-1</id><title>Rate decision</title><link rel="alternate" href="https://example.test/rate"/><updated>2026-09-10T12:00:00Z</updated><author><name>ECB</name></author><category term="monetary policy"/></entry></feed>`;
   const item = parseRssOrAtom(xml)[0]!; assert.equal(item.id, "ecb-1"); assert.equal(item.author, "ECB"); assert.deepEqual(item.categories, ["monetary policy"]); assert.equal(item.updated, "2026-09-10T12:00:00.000Z");
 });
+test("parses RSS dc:date publication dates used by the Federal Reserve feeds", () => {
+  const xml = `<rss><channel><item><guid>fed-1</guid><title>Federal Reserve issues FOMC statement</title><link>https://example.test/fomc</link><pubDate><![CDATA[Fri, 12 Sep 2026 18:00:00 GMT]]></pubDate><category>Monetary Policy</category></item></channel></rss>`;
+  const candidate = rssCandidates(xml, { sourceSlug: "federal-reserve", language: "en", feedUrl: "https://www.federalreserve.gov/feeds/press_monetary.xml", maxItems: 5 })[0]!;
+  assert.equal(candidate.publishedAt, "2026-09-12T18:00:00.000Z");
+});
 test("parses the Bank of Finland's bounded official news index", () => {
   const html = `<p>Press release | 9 Sep 2026</p><a href="/en/news-and-topical/release/">Finland’s economy at a turning point</a>`;
   const items = parseBankOfFinlandNewsIndex(html, "https://www.suomenpankki.fi/en/news-and-topical/press-releases-and-news/", 30); assert.equal(items.length, 1); assert.equal(items[0]!.sourceSlug, "bank-of-finland"); assert.match(items[0]!.canonicalUrl, /suomenpankki\.fi/);
