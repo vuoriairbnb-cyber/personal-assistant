@@ -1,153 +1,56 @@
-# Setup — Personal Assistant
+# Local setup
 
-Project documentation. `README.md` in this repo holds the visual design system
-(colors, type, spacing, components) authored separately — this file covers
-running and deploying the actual application.
+[README.md](README.md) describes the product and its boundaries. This guide covers a safe local development setup.
 
-## Stack
+## Prerequisites
 
-Next.js App Router (TypeScript) · Tailwind CSS · Supabase (Postgres + Auth) ·
-Anthropic Claude API · deployed on Vercel.
+- Node.js 20+
+- A Supabase project with email authentication enabled
+- Provider credentials only for the feature modules you intend to run
 
-## 1. Environment variables
-
-Copy `.env.example` to `.env.local` and fill in real values:
-
-| Variable | Where it's used | Exposure |
-|---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL | public |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon/public key | public |
-| `SUPABASE_SERVICE_ROLE_KEY` | reserved for future server-only admin scripts | **server-only, unused by the app today** |
-| `ANTHROPIC_API_KEY` | Claude API calls | **server-only** |
-| `ANTHROPIC_MODEL` | default model id if a user has no saved preference | server-only |
-| `NEXT_PUBLIC_SITE_URL` | builds the signup email-confirmation redirect | public |
-| `SIGNUP_INVITE_CODE` | required to complete signup at all | **server-only** |
-| `AIRBNB_ICAL_URL` | Airbnb "Export Calendar" iCal feed, synced into the Calendar module | **server-only** |
-
-`.env.local` is git-ignored. Never commit real keys. The app currently never
-imports `SUPABASE_SERVICE_ROLE_KEY` anywhere — all data access goes through
-the anon key + Postgres Row Level Security, scoped to the signed-in user via
-their session cookie (`lib/supabase/server.ts`). The service key is provided
-for future one-off admin tooling only; if you add a script that uses it,
-keep it out of any file reachable from a Client Component.
-
-## 2. Supabase project
-
-1. Create a project at supabase.com.
-2. In the SQL editor, run, **in this exact order**:
-   `db/migrations/0001_init.sql`, then `db/migrations/0002_approval_gate.sql`,
-   then `db/migrations/0003_fix_owner_bootstrap.sql`, then
-   `db/migrations/0004_calendar.sql`. Together they create:
-   - `profiles`, `trips`, `trip_ai_outputs`, `ai_cost_logs`, `app_settings`,
-     `calendar_connections`, `calendar_events`
-   - a trigger that creates a `profiles` row on signup (defaulting to
-     `status = 'pending'`, `role = 'user'`)
-   - Row Level Security policies scoping every table to `auth.uid()`, plus
-     helper functions (`is_owner`, `is_approved`) and a trigger that blocks
-     anyone but the owner from changing `status`/`role`/`approved_by`/
-     `approved_at`/`rejected_at` — even on their own row
-   - `0003` is a required bug fix on top of `0002`: the privilege-escalation
-     trigger originally reverted changes made via the service role key or the
-     SQL editor too (no JWT there means `auth.uid()` is `NULL`, so
-     `is_owner(NULL)` was always false) — which silently broke the
-     first-owner bootstrap snippet below. `0003` scopes the guard to only
-     apply when `auth.uid()` is present (i.e. a real signed-in end user).
-3. Under Authentication → Providers, enable **Email**.
-4. Under Authentication → URL Configuration, set:
-   - Site URL: your deployed URL (or `http://localhost:3000` for local dev)
-   - Redirect URLs: add `<site-url>/auth/callback`
-5. Copy the Project URL and anon public key into `.env.local`.
-
-Google OAuth can be added later under Authentication → Providers without any
-schema changes — `profiles.id` already references `auth.users(id)`.
-
-## 3. Private access control
-
-This app is not open signup. Every new account lands as `status = 'pending'`
-and `role = 'user'`, and cannot use any module — Dashboard, Travel Planner,
-Calendar, Inbox, AI Costs, Settings — until the owner approves it. This is
-enforced twice: once in `middleware.ts` (redirects pending/rejected users to
-`/pending-approval` / `/access-rejected`), and again inside every Server
-Action and Row Level Security policy (`lib/auth/guard.ts`,
-`db/migrations/0002_approval_gate.sql`), so hiding a button in the UI is never
-the only thing standing between a pending account and real data.
-
-### Invite code
-
-Set `SIGNUP_INVITE_CODE` in `.env.local` (and in Vercel for production) to a
-long random string before anyone signs up. Share it out-of-band — over
-Signal, in person, whatever — never inside the app itself. Signup fails
-server-side if the code doesn't match, before an auth account is even
-created.
-
-### Making the first user the owner
-
-1. Set `SIGNUP_INVITE_CODE` and sign up for an account the normal way at
-   `/signup`. It will sit in `pending` — that's expected, since no owner
-   exists yet to approve it.
-2. In the Supabase SQL editor, run:
-
-   ```sql
-   update public.profiles
-   set role = 'owner', status = 'approved', approved_at = now()
-   where email = 'you@example.com';
-   ```
-
-3. Sign in. You'll land on `/dashboard` and see a "Manage users" link under
-   Settings (`/settings/users`).
-
-This is a one-time manual step by design — there is no UI path to create an
-owner, so it can't be triggered by a bug or a compromised session.
-
-### Approving family members (or anyone else) later
-
-1. They visit `/signup` with the invite code and create an account. It sits
-   at `/pending-approval` until you act.
-2. Sign in as the owner, go to **Settings → Manage users**
-   (`/settings/users`).
-3. Under **Pending**, click **Approve** (or **Reject**). Approved accounts
-   default to `role = 'user'`; use the role dropdown next to their name to
-   set `family` if you want to distinguish them later (the app doesn't yet
-   branch behavior on `family` vs `user` — it's there for when it does).
-4. Role can only be set to `family` or `user` from this page. Promoting
-   someone to `owner` is intentionally not a button anywhere — it's the same
-   one-time SQL snippet from the previous section, run manually in Supabase.
-
-## 4. Calendar sync
-
-The Calendar module stores manual events for real (`calendar_events`,
-migration `0004`) and can sync one external source today:
-
-**Airbnb (iCal, live):**
-1. In your Airbnb host dashboard, go to Calendar → Availability → **Export
-   Calendar** and copy the iCal URL. The URL itself is a bearer secret —
-   anyone with it can read your reservation calendar — so treat it like a
-   password: never paste it into the app UI, a commit, or anywhere client-side.
-2. Set `AIRBNB_ICAL_URL` in `.env.local` (and in Vercel for production).
-3. In the app, go to **Calendar → Manage connections → Airbnb → Connect**.
-   This performs the first sync and creates your `calendar_connections` row;
-   **Sync now** repeats it on demand. There is no automatic background sync —
-   nothing fetches the feed until you click something.
-
-**Google Calendar (not built yet):** needs an OAuth client (client ID +
-secret) from a Google Cloud project, which only you can create — the
-Connection card shows as "Coming soon" until that's wired up.
-
-## 5. Local development
+## 1. Install and configure
 
 ```bash
 npm install
+cp .env.example .env.local
+```
+
+`.env.local` is local-only. Fill it with your own values and never commit it. [`.env.example`](.env.example) is the source of truth for current variable names and marks public versus server-only configuration.
+
+Core configuration includes:
+
+- `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` for Supabase browser/session clients;
+- `SUPABASE_SERVICE_ROLE_KEY` for server-only infrastructure operations;
+- `NEXT_PUBLIC_SITE_URL` for auth redirects;
+- `SIGNUP_INVITE_CODE` for server-side signup admission.
+
+Other variables are optional by module: Anthropic powers trip assistance, OpenAI powers Morning Brief classification and embeddings, ElevenLabs powers Conversations and the golf tool, Telegram delivers watch notifications, and golf/calendar/benefits/Kide variables enable their respective integrations.
+
+## 2. Database and authentication
+
+Apply the migration files that exist in `db/migrations/` to a development Supabase project in ascending filename order. Do not assume that a numeric gap represents a missing migration: apply only files included in your checkout.
+
+In Supabase Auth, configure your local site URL and add the local `/auth/callback` redirect URL. The app adds an approval gate on top of Supabase Auth, so a newly registered user remains pending until an owner approves it.
+
+For a new development project, create the first approved owner through the Supabase SQL editor after signup. Use an account you control and do not put personal addresses or credentials in repository documentation.
+
+## 3. Run locally
+
+```bash
 npm run dev
 ```
 
-Visit `http://localhost:3000`. You'll be redirected to `/login`; use `/signup`
-with the invite code from `.env.local` to create an account (Supabase sends a
-confirmation email if email confirmations are enabled on the project). The
-account lands on `/pending-approval` until it's approved — see
-[Private access control](#3-private-access-control) above for making the
-first account the owner.
+Open `http://localhost:3000`. Sign in through the normal approval flow. A module remains unavailable until both its server-side configuration and its database prerequisites are present.
 
-## 6. Quality checks
+## 4. Module boundaries
+
+- **Morning Brief:** public-source ingestion and regeneration are authenticated, manually initiated actions; there is no scheduler.
+- **ElevenLabs:** Conversations is a read-only, server-side integration. The protected golf tool has independent bearer authentication and Supabase-backed rate limiting.
+- **Golf watches:** the local app can create and inspect watches; recurring processing requires an external Supabase Cron configuration and its server-only cron secret.
+- **Calendar:** private iCal feed URLs are server-only bearer secrets; the app reads feeds and does not write to providers.
+- **Kide:** the Chrome extension is loaded locally in normal Chrome. It is a bounded proof of concept, not a cloud-side purchasing worker, and stops before payment.
+
+## 5. Verify changes
 
 ```bash
 npm run lint
@@ -155,31 +58,10 @@ npm run typecheck
 npm run build
 ```
 
-## 7. Deploying to Vercel
+Focused automated tests use Node's test runner through `tsx`; there is no catch-all `npm test` script. Run the relevant `*.test.ts` or `*.test.mjs` files for the module being modified.
 
-1. Import the repo into Vercel.
-2. Add the same environment variables from `.env.local` in Project Settings →
-   Environment Variables (set `NEXT_PUBLIC_SITE_URL` to the production URL,
-   and use a fresh `SIGNUP_INVITE_CODE` if you don't want to reuse the local one).
-3. Deploy. Vercel runs `next build` automatically.
-4. Update the Supabase Auth redirect URL to match the production domain.
+## Security reminders
 
-## Product safety boundaries (do not remove)
-
-- The app never sends email automatically — email drafts are saved as
-  `trip_ai_outputs` rows with `status: draft` for the user to copy or approve.
-- The app never books, purchases, or pays for anything.
-- The Calendar module only ever *reads* from external calendars (Airbnb
-  iCal today, Google Calendar once it exists) — synced events are always
-  read-only in the UI and nothing is ever written back to Google or Airbnb.
-  Only events you create yourself in the app (`source = 'manual'`) can be
-  edited or deleted, enforced both in the UI and server-side in
-  `lib/actions/calendar.ts`.
-- `ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `AIRBNB_ICAL_URL` are
-  only referenced from files that import `"server-only"` (`lib/claude/*`,
-  `lib/supabase/server.ts`, `lib/cost/*`, `lib/calendar/ical.ts`) or from
-  Server Actions/Route Handlers — never from a file with a `"use client"`
-  directive. The same is true of `SIGNUP_INVITE_CODE` (`lib/actions/auth.ts`).
-- No account can use any module until the owner approves it, and no account
-  can become the owner except via the manual SQL snippet above — never
-  through the app UI.
+- Keep API keys, bearer tokens, bot credentials, iCal URLs, cookies, and service-role credentials server-only.
+- Never place a real secret in `.env.example`, a test fixture, a browser bundle, logs, or Git history.
+- Do not bypass the approved-user guard or broaden the machine-endpoint allowlist; machine routes must validate their own secrets.

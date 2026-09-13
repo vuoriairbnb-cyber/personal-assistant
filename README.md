@@ -1,138 +1,172 @@
-# Personal Assistant — Design System
+# Personal Assistant
 
-Personal Assistant is a premium, modular personal productivity app: travel planning, calendar coordination, inbox follow-up, and AI-assisted admin work. The first shipping module is **Travel Planner** — it stores trip projects, ingests travel plans pasted from ChatGPT/Claude chats, structures them into operational plans (itinerary, lodging, transport), drafts emails to local operators, compares offers, and (later) connects calendar + email workflows.
+Personal Assistant is a secure, full-stack personal operating system for turning scattered information and recurring tasks into useful, reviewable workflows. It combines personalized intelligence, ElevenLabs-powered conversational AI and WhatsApp visibility, monitoring and notification automation, and AI-assisted workflows in one authenticated application.
 
-**Sources used to build this system:** none were attached (no Figma file, no codebase, no decks). This design system was authored from scratch from the written brief only — visual direction, color/type choices, and all components below are original interpretations of that brief, not extracted from an existing product. If a Figma file, codebase, or brand guide exists, attach it and this system should be reconciled against it (see Caveats at the end of this file).
+It is an active portfolio prototype built around a practical constraint: automation should be helpful, bounded, observable, and secure by default rather than an opaque chatbot with unrestricted access.
 
-The product should feel like a **personal operating system + travel concierge + productivity workspace** — calm, spacious, structured around cards/saved outputs/approval workflows. Explicitly not a generic AI chatbot or AI-SaaS look: no neon, no cyberpunk, no heavy gradients.
+> **Status:** Active prototype / portfolio project. Some modules are mature and actively used by a single approved user; the local Kide Chrome reservation workflow remains an experimental, intentionally bounded proof of concept.
 
----
+## Highlights
 
-## Content fundamentals
+- **Morning Brief** — imports open public sources, normalizes and deduplicates stories, uses structured AI classification and embeddings, ranks content using portfolio relevance and learned feedback, then persists a daily brief and reading library.
+- **ElevenLabs + WhatsApp conversation inbox** — a server-side ElevenLabs integration presents filtered conversation transcripts and WhatsApp context without exposing API credentials to the browser.
+- **Protected AI tool endpoint** — an ElevenLabs golf-search tool uses independent bearer authentication, strict validation, per-user/global Supabase rate limits, and shared golf-search logic.
+- **Golf monitoring and notifications** — WiseGolf availability and player searches can create persistent watches; a Supabase-triggered worker processes watches, isolates failures, and dispatches deduplicated Telegram notifications.
+- **Security-first foundation** — Supabase Auth approval gates, row-level security, server-only service clients, narrowly scoped machine endpoints, and environment-based secrets separate user and service access.
 
-**Voice:** calm, competent, concierge-like — like a well-briefed personal assistant, not a chatbot. Confident but never chatty; efficient but never curt.
+## Architecture
 
-**Person:** second person ("you"/"your trip") for the user's own content; the assistant refers to itself minimally and avoids "I" where a structural statement works better ("Drafted for your review" rather than "I drafted this for you").
+```mermaid
+flowchart LR
+  User[Approved user] --> Web[Next.js App Router]
+  WhatsApp[WhatsApp via ElevenLabs] --> EL[ElevenLabs Conversations API]
+  EL --> Web
+  Web --> SB[(Supabase: Auth, Postgres, RLS)]
 
-**Casing:** sentence case everywhere — headings, buttons, labels. Never title case, never all-caps except tiny uppercase micro-labels (badges, section eyebrows) which use letter-spacing to read as structure, not shouting.
+  Sources[Open public sources] --> MB[Morning Brief pipeline]
+  MB --> OAI[OpenAI: classification + embeddings]
+  MB --> SB
 
-**Tone examples:**
-- Button: "Send to operator" (not "Send Email!" or "Let's go!")
-- Empty state: "No trips yet. Paste a plan to get started." (direct, no filler enthusiasm)
-- Confirmation: "Draft ready — review before sending." (states status, implies the approval gate)
-- Error: "Couldn't reach Kyoto Rickshaw Tours. Try again or edit the email." (states fact + gives a next action)
+  Web --> Golf[WiseGolf availability / player search]
+  Golf --> Watches[Persistent golf/player watches]
+  Watches --> SB
+  Cron[Supabase Cron] --> Worker[Protected watch worker]
+  Worker --> Telegram[Telegram notifications]
 
-**Approval-first framing:** copy should always make clear the assistant *proposes*, the user *approves*. Prefer "Review draft" / "Approve & send" / "Awaiting your review" over anything implying the system acted unilaterally.
+  Kide[Kide local Chrome extension POC] -. paired local control plane .-> Web
+```
 
-**Emoji:** none. This is a premium, calm surface — emoji would read as informal/AI-generic.
+### Morning Brief pipeline
 
-**Numbers & dates:** always concrete and specific (real currency symbols, real dates) — a system built on real bookings should never feel vague.
+```text
+Public source adapters
+  → normalize and validate
+  → deduplicate and persist articles
+  → structured classification (Luna by default; Terra only for exceptions)
+  → embeddings when source text changes
+  → clustering, ranking and personal relevance
+  → persisted daily brief, library and feedback loop
+```
 
----
+Morning Brief does not use a scheduled ingestion job yet: an approved user initiates ingestion and regeneration. The model policy intentionally has no Sol fallback path.
 
-## Visual foundations
+### ElevenLabs and WhatsApp
 
-**Color:** cool off-white/lavender canvas (`--surface-canvas`, `#F6F5FA`) with white cards (`--surface-card`, `#FFFFFF`). Text is a near-black violet-charcoal (`--text-primary`, `#151521`) — dark enough for strong contrast but not pure black. One confident violet accent (`--accent`, `#6D4CFF`) carries all primary actions, links and active nav state. Semantic status colors stay muted, not saturated: sage green for success, warm amber for warning, muted terracotta for danger/destructive — these are deliberately unchanged from the original palette since they're status colors, not part of the canvas/card/accent identity.
+The Conversations page uses server-side ElevenLabs API calls to list and enrich conversations for one configured agent. It safely renders text transcripts and detects WhatsApp context only when it is supported by returned data. The app also exposes a separate, machine-to-machine golf tool route for the agent; it is not a public proxy and does not rely on browser-session authentication.
 
-**Type:** three families, each with one clear job. `Newsreader` (serif) is the editorial/display voice — trip names, page titles, big numbers/amounts — it's what makes the product feel like a considered concierge document rather than a SaaS dashboard. `Manrope` (sans) is the UI workhorse — labels, body copy, buttons, nav. `IBM Plex Mono` is reserved for anything literal and precise — confirmation codes, dates in tables, reference numbers — never for prose. See "Font substitution" caveat below: these are Google Fonts stand-ins, not licensed brand fonts.
+Current scope is read-only conversation visibility plus golf tool calling. It does not send WhatsApp replies, use inbound webhooks, or persist conversation data locally.
 
-**Spacing:** 4px base scale (4/8/12/16/20/24/32/40/48/64/80/96). Cards use 20px internal padding by default; card-to-card gaps in a stack are 12px. Generous whitespace throughout — this is a spacious workspace, not a dense dashboard.
+### Automation with boundaries
 
-**Backgrounds:** flat color only. No photographic backgrounds, no full-bleed hero imagery, no illustration patterns, no textures, no gradients. The canvas is a cool off-white/lavender; content sits on white cards above it.
+Golf Watch and Player Watch records are stored in Supabase. An external Supabase Cron job invokes a protected route; the worker checks due watches, writes matches to a notification outbox, and sends retryable, deduplicated Telegram notifications. Individual watch/provider failures are isolated so one failure does not create a false positive or block unrelated work.
 
-**Radius:** generously rounded, always soft — 8px on small controls (inputs, tags), 12px on buttons/mid controls, 20px on standard cards, 24px on modals/large surfaces, full pill on badges/switches/chips. Never sharp corners, never a tiny 2–4px "SaaS default" radius.
+The Kide module includes a local Chrome extension proof of concept. It uses a paired local control plane, strict target validation, one-item/one-click limits, timeout limits, challenge detection, and stops before payment. It should not be treated as unattended purchasing automation.
 
-**Shadows:** soft and cool-violet-tinted (`rgba(25,20,60,…)`, never pure black) — a light lift, not a hard drop shadow. Four steps (xs/sm/md/lg) scale with elevation: list rows almost flat, cards a gentle lift, modals the most pronounced. A dedicated `--shadow-focus` ring (violet halo) marks keyboard/input focus — no harsh blue outline.
+## Product areas
 
-**Borders:** thin (1–1.5px) hairline borders in cool neutral tones (`--border-subtle`, `--border-default`) separate cards from the canvas even where shadow alone would suffice — this keeps edges crisp at low elevation. Borders darken to `--border-strong` (near-black violet-charcoal) only for interactive controls needing more definition (checkbox/radio outlines).
+| Area | What is implemented |
+| --- | --- |
+| Morning Brief | Public-source ingestion, classification/versioning, embeddings, ranking, feedback, library, and persisted daily briefs. |
+| Conversations | Read-only ElevenLabs conversation list and transcript detail with WhatsApp-aware presentation when data supports it. |
+| Golf | Multi-club tee-time availability, authenticated player search for configured clubs, watches, and Telegram dispatch. |
+| Benefits | Aggregated Member+, CityShoppari, and Frank providers with isolated provider failures. |
+| Calendar | Local calendar events plus private iCal import support. |
+| Trips | Trip workspace with stored plans and AI-assisted structured plans, briefs, itineraries, budgets, and email drafts. |
+| Kide | Paired local control plane and Chrome reservation POC; advanced always-on work is still in progress locally. |
 
-**Animation:** minimal and functional, never decorative. Standard ease (`cubic-bezier(0.4,0,0.2,1)`) at 120–200ms for hovers/toggles; a slightly springier ease-out for switches/reveals. No bouncing, no infinite loops, no attention-seeking motion — this is a calm, trustworthy surface.
+## Tech stack
 
-**Hover states:** primary/secondary/danger buttons darken one step and lift 1px; ghost buttons and nav items gain a soft violet background fill (`--sand-200`, an accent-tinted fill despite the legacy token name); nothing changes size or shape on hover.
+| Layer | Technology |
+| --- | --- |
+| Frontend | Next.js 15 App Router, React 19, TypeScript, Tailwind CSS, Lucide icons |
+| Backend | Next.js route handlers and Server Actions with server-only integration modules |
+| Data and auth | Supabase Auth, PostgreSQL, Row Level Security, Supabase SSR and service clients |
+| AI | OpenAI structured classification and embeddings for Morning Brief; Anthropic SDK for trip assistance; ElevenLabs Conversational AI integration |
+| Automation | Supabase Cron calling a protected Next.js worker; notification outbox and Telegram delivery |
+| Browser automation research | Playwright and a local Chrome extension proof of concept for Kide |
+| Deployment | Vercel for the Next.js application; Supabase for data and scheduled worker invocation |
 
-**Press/active states:** darken a further step (`--accent-active`, `--danger-strong` etc.) with no additional transform — presses read as "committed," not "bouncy."
+## Security model
 
-**Corner radius & card anatomy:** the standard card = white fill (`--surface-card`) + 1px `--border-subtle` + `--shadow-sm` + 20px radius + 20px padding. This combination (fill + hairline border + soft shadow) is the system's signature — never fill-only or border-only.
+- Browser clients use Supabase's public client; privileged database work uses a separate `server-only` service client with session persistence disabled.
+- Access to app data requires an authenticated, approved user. Database migrations establish user-scoped RLS policies.
+- API keys, service credentials, bot tokens, private iCal URLs, WiseGolf credentials, and machine secrets are server-only environment variables.
+- The only user-session bypasses are an explicit allowlist of machine endpoints, each validating its own bearer secret. The golf tool has validation and Supabase-backed rate limiting.
+- Background notification delivery is outbox-based, retryable, and deduplicated.
 
-**Transparency/blur:** used exactly once, intentionally — the modal scrim (`rgba(33,35,42,0.35)` + 2px blur) to focus attention on approval dialogs. Not used decoratively elsewhere.
+## Local development
 
-**Imagery:** none supplied. If/when travel photography is added (destination shots, operator photos), it should read warm and natural-light — not cool/blue-toned, not heavily filtered, no harsh flash or stock-photo gloss. No sourced imagery exists in this system yet — see Iconography/Caveats.
+### Prerequisites
 
-**Layout rules:** desktop uses a fixed 260px left sidebar (nav) + fluid content area, max content width ~1120px so line lengths and card grids stay comfortable at wide viewports. Mobile drops the sidebar for a fixed 64px bottom tab bar; content becomes a single column.
+- Node.js 20+
+- A Supabase project
+- Provider credentials for only the modules you want to run
 
----
+### Setup
 
-## Iconography
+```bash
+npm install
+cp .env.example .env.local
+```
 
-No icon font, SVG sprite, or icon asset was supplied with the brief. This system uses **Lucide** (lucide.dev) as a CDN-linked substitute — flagged here as a substitution, not a brand decision. Lucide's icons are thin-stroke, geometric, and calm, which matches the "premium workspace, not chatbot" direction, but should be swapped for a real brand icon set if/when one exists.
+Populate `.env.local` with your own development values. The tracked [`.env.example`](.env.example) lists variable names and safe placeholders only. Apply the relevant tracked SQL migrations in [`db/migrations`](db/migrations) to a development Supabase project before using database-backed modules.
 
-Icons are consumed via the `Icon` component (`components/primitives/Icon.jsx`), which loads each glyph as a static SVG from `unpkg.com/lucide-static` and tints it to `currentColor` via a CSS mask — so icons always inherit whatever text color surrounds them (accent, success, warning, etc.) without needing per-color asset variants.
+```bash
+npm run dev
+```
 
-No emoji, no Unicode-glyph icons, no PNG icon sets are used anywhere in this system.
+Open `http://localhost:3000` and use the signup/approval flow. Some integrations remain unavailable until their corresponding server-side variables are configured.
 
----
+### Verification
 
-## Brand mark
+```bash
+npm run lint
+npm run typecheck
+npm run build
+```
 
-**No logo file was supplied.** Per instructions, no logo has been drawn or approximated. Wherever a mark would normally sit (sidebar header, login screen, favicon), the system renders the wordmark "Personal **_Assistant_**" in `Newsreader` with the italic accent-colored second word — see `guidelines/brand-wordmark.html`. Replace with a real logo file the moment one exists.
+Focused tests use Node's test runner through `tsx`; there is intentionally no catch-all `npm test` script. Run the relevant `*.test.ts` files for the module being changed.
 
----
+## Current status
 
-## Components
+✅ **Implemented**
 
-All components live under `components/<group>/`, are plain-React (`.jsx` + sibling `.d.ts` + `.prompt.md`), and style themselves purely with the CSS custom properties in `tokens/`. No component library or codebase was supplied, so this is an **authored-from-scratch standard set**, sized to what Travel Planner's approval-based workflows need — not a copied inventory.
+- Secure approved-user application shell with Supabase-backed data access.
+- Morning Brief ingestion, AI processing, personalization signals, daily brief persistence, and article library.
+- ElevenLabs conversation/WhatsApp read-only inbox and protected golf tool integration.
+- Golf availability, player watches, cron processing, notification outbox, and Telegram delivery.
+- Benefits aggregation, calendar/iCal support, and AI-assisted trip workspace.
 
-**Primitives** (`components/primitives/`): `Icon`, `Card`
+🚧 **In progress**
 
-**Forms** (`components/forms/`): `Button`, `IconButton`, `Input`, `Select`, `Checkbox`, `Radio`, `Switch`
+- Kide local Chrome extension and paired control-plane work, including further watch/event flow work that is not part of the committed public baseline.
+- Expansion and operational validation of Morning Brief source adapters.
 
-**Feedback** (`components/feedback/`): `Badge`, `Tag`, `Tooltip`, `Toast`, `Dialog`
+🗺 **Planned / intentionally not implemented**
 
-**Navigation** (`components/navigation/`): `Tabs`, `Sidebar`, `BottomTabs`
+- Scheduled Morning Brief ingestion.
+- WhatsApp message sending, reply composition, and inbound webhook processing.
+- Payment completion or unattended purchase flow for the Kide prototype.
 
-**Intentional additions** (components a from-scratch system needs that weren't explicitly requested):
-- `Icon` — a thin wrapper needed to consume the Lucide substitution set consistently across every other component.
-- `Dialog` — the brief's "approval-based workflows" concept needs a concrete confirm/cancel modal pattern; this is the load-bearing component for that idea (e.g. "Send email to operator?").
-- `Badge` / `Tag` — trip and booking status (Draft/Confirmed/Awaiting reply) and lightweight categorization (Family/Business) are core to the described card-based dashboard.
+## Repository guide
 
----
+| Path | Purpose |
+| --- | --- |
+| [`app`](app) | App Router pages, layouts, and API route handlers. |
+| [`components`](components) | Reusable UI and feature-specific client components. |
+| [`lib`](lib) | Server-side domain modules: auth, Supabase, Morning Brief, golf, notifications, integrations, and actions. |
+| [`db/migrations`](db/migrations) | PostgreSQL schema, RLS, and RPC migrations. |
+| [`tools/kide-chrome-poc`](tools/kide-chrome-poc) | Local Chrome-extension proof of concept, not a cloud-side payment bot. |
+| [`.env.example`](.env.example) | Safe environment-variable template; never commit real values. |
 
-## UI kit — Travel Planner
+## Before publishing or deploying
 
-`ui_kits/travel-planner/` is a click-through recreation of the described product: a desktop dashboard (sidebar + trip cards) and the trip detail workspace (itinerary / offers / emails tabs, paste-a-plan flow, approve-and-send dialog), plus the mobile bottom-tab layout. It composes the components above — no primitives are reimplemented inside the kit.
+1. Keep `.env*`, local browser profiles, logs, and local databases untracked.
+2. Use a fresh Supabase project and new provider credentials.
+3. Review migrations and RLS policies for your deployment model.
+4. Configure the external Supabase Cron job only if golf watches are needed.
+5. Treat the Kide proof of concept as local, supervised experimental software.
 
-Screens:
-- **Dashboard** — trip list as cards, status badges, "New trip" paste flow
-- **Trip workspace** — itinerary tab (structured line items), offers tab (radio comparison), emails tab (drafted message + approve & send dialog)
-- **Mobile** — same trip workspace adapted to a single column with bottom tabs
+## Portfolio note
 
----
-
-## Index
-
-- `styles.css` — root stylesheet; imports everything below. Link this one file from any consumer.
-- `base.css` — minimal reset (body, headings, links)
-- `tokens/colors.css` — palette + semantic surface/text/status tokens
-- `tokens/typography.css` — font families, type scale, weights, line-height, tracking
-- `tokens/spacing.css` — spacing scale, radius scale, layout constants (sidebar width, bottom-tab height)
-- `tokens/effects.css` — shadows, border widths, easing/duration
-- `tokens/fonts.css` — Google Fonts `@import` (Newsreader, Manrope, IBM Plex Mono — substitutes, see caveat)
-- `guidelines/` — foundation specimen cards (colors, type, spacing, shadows, radii, card anatomy, brand wordmark)
-- `components/primitives/` — Icon, Card
-- `components/forms/` — Button, IconButton, Input, Select, Checkbox, Radio, Switch
-- `components/feedback/` — Badge, Tag, Tooltip, Toast, Dialog
-- `components/navigation/` — Tabs, Sidebar, BottomTabs
-- `ui_kits/travel-planner/` — full click-through product recreation
-- `SKILL.md` — portable skill definition for Claude Code / other agents
-
----
-
-## Caveats — please help me iterate
-
-- **No source materials were attached** — no Figma, no codebase, no decks, no existing brand guide. Every color, type choice, spacing value, and component here is my own interpretation of the written brief, not extracted from something real. If Personal Assistant has an existing brand (even partial — a logo, a color you already use, a font license), attach it and I'll reconcile this system against it.
-- **Fonts are Google Fonts substitutes**, not licensed brand fonts: `Newsreader` (display/serif), `Manrope` (UI/body), `IBM Plex Mono` (data/mono). If you have real brand fonts, send the files and I'll swap `tokens/fonts.css` to self-hosted `@font-face` rules.
-- **No logo exists in this system** — a plain wordmark stands in everywhere a mark would go. Send a logo file when you have one.
-- **Icons are Lucide (CDN)**, not a brand-specific set — flagged as substitution.
-- **Component inventory is a from-scratch standard set** sized to the brief, not derived from an existing library — tell me if something's missing or overbuilt.
-
-**Bold ask:** tell me if the calm/sand/muted-blue direction actually feels right for Personal Assistant, or if you want me to explore a colder/more neutral alternative (e.g. slate + navy, less "warm concierge" and more "operating system"). I can spin up 2–3 palette/type variations fast if you want to compare before this hardens into the system of record.
+This project demonstrates an end-to-end personal AI system: full-stack application architecture with RLS-backed security boundaries, structured AI workflows, protected tool calling, persistent automation, and deliberately bounded browser-agent experimentation.
