@@ -8,7 +8,7 @@ test("candidate limits are deterministic and bounded workers preserve item order
 });
 
 test("production live-ingestion limits are intentionally small", () => {
-  assert.deepEqual(LIVE_INGESTION_BATCH_LIMITS, { yle: 10, "bank-of-finland": 5, ecb: 5, "pyn-elite": 4, "vietnam-statistics": 3, "federal-reserve": 5, eurostat: 4 });
-  assert.deepEqual(LIVE_INGESTION_CANDIDATE_LIMITS, { yle: 30, "bank-of-finland": 15, ecb: 15, "pyn-elite": 12, "vietnam-statistics": 8, "federal-reserve": 15, eurostat: 10 });
+  assert.deepEqual(LIVE_INGESTION_BATCH_LIMITS, { yle: 10, "bank-of-finland": 5, ecb: 5, "pyn-elite": 4, "vietnam-statistics": 3, "federal-reserve": 5, eurostat: 4, "statistics-finland": 4, "finance-ministry-finland": 3, riksbank: 4, "norges-bank": 4, "vietnam-government": 3, "economic-affairs-finland": 3, bis: 3, "dg-ecfin": 3 });
+  assert.deepEqual(LIVE_INGESTION_CANDIDATE_LIMITS, { yle: 30, "bank-of-finland": 15, ecb: 15, "pyn-elite": 12, "vietnam-statistics": 8, "federal-reserve": 15, eurostat: 10, "statistics-finland": 15, "finance-ministry-finland": 15, riksbank: 20, "norges-bank": 20, "vietnam-government": 20, "economic-affairs-finland": 15, bis: 15, "dg-ecfin": 15 });
   assert.equal(LIVE_INGESTION_CONCURRENCY, 2);
 });

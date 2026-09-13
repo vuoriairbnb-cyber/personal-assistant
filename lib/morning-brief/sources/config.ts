@@ -9,6 +9,14 @@ export const LIVE_INGESTION_BATCH_LIMITS: Record<string, number> = {
   "vietnam-statistics": 3,
   "federal-reserve": 5,
   eurostat: 4,
+  "statistics-finland": 4,
+  "finance-ministry-finland": 3,
+  riksbank: 4,
+  "norges-bank": 4,
+  "vietnam-government": 3,
+  "economic-affairs-finland": 3,
+  bis: 3,
+  "dg-ecfin": 3,
 };
 
 /** Bounds database deduplication work before AI processing begins. */
@@ -20,6 +28,14 @@ export const LIVE_INGESTION_CANDIDATE_LIMITS: Record<string, number> = {
   "vietnam-statistics": 8,
   "federal-reserve": 15,
   eurostat: 10,
+  "statistics-finland": 15,
+  "finance-ministry-finland": 15,
+  riksbank: 20,
+  "norges-bank": 20,
+  "vietnam-government": 20,
+  "economic-affairs-finland": 15,
+  bis: 15,
+  "dg-ecfin": 15,
 };
 
 export const LIVE_SOURCE_FETCH_TIMEOUT_MS = 12_000;
@@ -48,4 +64,14 @@ export const MORNING_BRIEF_FEEDS: readonly MorningBriefFeedConfig[] = [
   { id: "eurostat-economy-finance", sourceSlug: "eurostat", sourceName: "Eurostat", sourceType: "rss", url: "https://ec.europa.eu/eurostat/en/search?_estatsearchportlet_WAR_estatsearchportlet_collection=CAT_PREREL&_estatsearchportlet_WAR_estatsearchportlet_theme=PER_ECOFIN&p_p_id=estatsearchportlet_WAR_estatsearchportlet&p_p_lifecycle=2&p_p_mode=view&p_p_resource_id=atom&p_p_state=maximized", language: "en", enabled: true, maxItems: 20, description: "Eurostat economy and finance news releases" },
   { id: "pyn-elite-news", sourceSlug: "pyn-elite", sourceName: "PYN Elite", sourceType: "official", url: "https://www.pyn.fi/en/news/", language: "en", enabled: true, maxItems: 20, description: "PYN Elite public fund news, monthly reviews and investor letters" },
   { id: "vietnam-statistics-press-room", sourceSlug: "vietnam-statistics", sourceName: "National Statistics Office of Vietnam", sourceType: "official", url: "https://www.nso.gov.vn/en/press-room/", language: "en", enabled: true, maxItems: 20, description: "Vietnam official macroeconomic press releases" },
+  { id: "statistics-finland-releases", sourceSlug: "statistics-finland", sourceName: "Statistics Finland", sourceType: "official", url: "https://stat.fi/en", language: "en", enabled: true, maxItems: 15, description: "Statistics Finland latest official releases" },
+  { id: "finance-ministry-current-issues", sourceSlug: "finance-ministry-finland", sourceName: "Ministry of Finance Finland", sourceType: "official", url: "https://vm.fi/en/current-issues", language: "en", enabled: true, maxItems: 15, description: "Finnish Ministry of Finance current issues" },
+  { id: "riksbank-press", sourceSlug: "riksbank", sourceName: "Sveriges Riksbank", sourceType: "rss", url: "https://www.riksbank.se/sv/rss/pressmeddelanden/", language: "sv", enabled: true, maxItems: 15, description: "Riksbank press releases" },
+  { id: "riksbank-monetary-minutes", sourceSlug: "riksbank", sourceName: "Sveriges Riksbank", sourceType: "rss", url: "https://www.riksbank.se/sv/rss/penningpolitiska-protokoll/", language: "sv", enabled: true, maxItems: 10, description: "Riksbank monetary-policy meeting minutes" },
+  { id: "norges-bank-financial-stability", sourceSlug: "norges-bank", sourceName: "Norges Bank", sourceType: "rss", url: "https://www.norges-bank.no/en/rss-feeds/Financial-Stability-report---Norges-Bank/", language: "en", enabled: true, maxItems: 10, description: "Norges Bank financial stability reports" },
+  { id: "norges-bank-monetary-policy", sourceSlug: "norges-bank", sourceName: "Norges Bank", sourceType: "rss", url: "https://www.norges-bank.no/en/rss-feeds/Norges-Bank-Monetary-Policy-Report-with-financial-stability-assessment/", language: "en", enabled: true, maxItems: 10, description: "Norges Bank monetary policy reports" },
+  { id: "vietnam-government-news", sourceSlug: "vietnam-government", sourceName: "Vietnam Government Portal", sourceType: "official", url: "https://en.baochinhphu.vn/", language: "en", enabled: true, maxItems: 20, description: "Vietnam Government Portal economic policy news" },
+  { id: "economic-affairs-finland-current-issues", sourceSlug: "economic-affairs-finland", sourceName: "Ministry of Economic Affairs and Employment Finland", sourceType: "official", url: "https://tem.fi/en/current-issues", language: "en", enabled: true, maxItems: 15, description: "Finnish Ministry of Economic Affairs and Employment current issues" },
+  { id: "bis-fsi-publications", sourceSlug: "bis", sourceName: "Bank for International Settlements", sourceType: "rss", url: "https://www.bis.org/doclist/bis_fsi_publs.rss", language: "en", enabled: true, maxItems: 15, description: "BIS Financial Stability Institute publications" },
+  { id: "dg-ecfin-newsletter", sourceSlug: "dg-ecfin", sourceName: "European Commission DG ECFIN", sourceType: "official", url: "https://economy-finance.ec.europa.eu/economic-and-financial-affairs-newsletter_en", language: "en", enabled: true, maxItems: 15, description: "DG ECFIN economic and financial affairs newsletter" },
 ];
