@@ -3,8 +3,7 @@ import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { isProductionMorningBriefCandidate, isTrustedLiveMorningBriefSource } from "./candidate-eligibility";
 import { IMPORT_CLASSIFICATION_VERSION } from "./classification-contract";
 import type { RankingArticle } from "./ranking";
-
-export const LIVE_MORNING_BRIEF_FRESHNESS_WINDOW_HOURS = 48;
+import { isMorningBriefEligible, MAX_MORNING_BRIEF_ELIGIBILITY_WINDOW_HOURS } from "./freshness-policy";
 
 export type LiveCandidateClassification = {
   topics: string[];
@@ -29,7 +28,7 @@ const record = (value: unknown) => value && typeof value === "object" && !Array.
 /** Read-only candidate mapping shared by production generation and diagnostics. */
 export async function loadLiveMorningBriefCandidates(userId: string, now: Date): Promise<LiveMorningBriefCandidates> {
   const db = createServiceSupabaseClient();
-  const liveCutoff = new Date(now.getTime() - LIVE_MORNING_BRIEF_FRESHNESS_WINDOW_HOURS * 3_600_000).toISOString();
+  const liveCutoff = new Date(now.getTime() - MAX_MORNING_BRIEF_ELIGIBILITY_WINDOW_HOURS * 3_600_000).toISOString();
   const { data: sources, error: sourceError } = await db.from("morning_brief_sources").select("id,slug,name,metadata_json");
   if (sourceError) throw sourceError;
   const sourceById = new Map((sources ?? []).map((source) => [source.id, source]));
@@ -58,6 +57,7 @@ export async function loadLiveMorningBriefCandidates(userId: string, now: Date):
       continue;
     }
     const imported = record(source.metadata_json).imported === true || record(article.raw_metadata_json).imported === true;
+    if (!imported && !isMorningBriefEligible(article.published_at, { rawMetadata: markers.articleMetadata, contentType: article.content_type }, now)) continue;
     if (imported) importedCandidateCount += 1; else liveCandidateCount += 1;
     const candidate: RankingArticle = { id: article.id, title: article.title, source: source.name, publishedAt: article.published_at, contentType: article.content_type, countries: classification.countries, regions: classification.regions, categories: classification.categories, topics: classification.topics, sectors: classification.sectors, companies: classification.companies, eventType: classification.event_type ?? undefined, canonicalUrl: article.canonical_url, imageUrl: article.image_url, imageAlt: article.image_alt, imageSource: article.image_source, significance: classification.significance, consequence: classification.consequence, scope: classification.scope, summary: classification.summary, primarySection: classification.primary_section };
     candidates.push({ article: candidate, classification: { topics: classification.topics, categories: classification.categories, countries: classification.countries, regions: classification.regions, sectors: classification.sectors, companies: classification.companies, eventType: classification.event_type, assetClasses: classification.asset_classes, significance: classification.significance, consequence: classification.consequence, scope: classification.scope, confidence: classification.confidence } });

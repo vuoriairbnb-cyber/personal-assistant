@@ -35,7 +35,8 @@ export function parsePynEliteNewsIndex(html: string, indexUrl: string, maxItems:
     const excerpt = decode(article.match(/<div[^>]*\belementor-post__excerpt\b[^>]*>([\s\S]*?)<\/div>/i)?.[1] ?? "");
     const publishedAt = dateFromText(article); if (!publishedAt) continue;
     const contentType = pynContentType(title);
-    candidates.push({ sourceSlug: "pyn-elite", sourceArticleId: hash(canonicalUrl), title, canonicalUrl, excerpt, publishedAt, categories: [contentType], language: "en", rawMetadata: { listing: "official-public-news-index", source_family: "portfolio_manager_official", portfolio_lens: "PYN Elite", region: /vietnam/i.test(`${title} ${excerpt}`) ? "Vietnam" : null, pyn_content_type: contentType } });
+    const freshnessClass = contentType === "monthly_review" || contentType === "investor_letter" || contentType === "market_commentary" || contentType === "fund_update" ? "portfolio_manager_update" : "standard_news";
+    candidates.push({ sourceSlug: "pyn-elite", sourceArticleId: hash(canonicalUrl), title, canonicalUrl, excerpt, publishedAt, categories: [contentType], language: "en", rawMetadata: { listing: "official-public-news-index", source_family: "portfolio_manager_official", portfolio_lens: "PYN Elite", region: /vietnam/i.test(`${title} ${excerpt}`) ? "Vietnam" : null, pyn_content_type: contentType, freshness_class: freshnessClass } });
     if (candidates.length >= maxItems) break;
   }
   return candidates;

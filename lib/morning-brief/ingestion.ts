@@ -10,7 +10,7 @@ import { normalizeImportUrl } from "./import-url";
 import { MORNING_BRIEF_SOURCE_ADAPTERS } from "./sources";
 import type { MorningBriefSourceAdapter, SourceCandidate, SourceIngestionSummary } from "./sources";
 import { classificationInputHash, liveCandidateContentHash } from "./ingestion-contract";
-import { LIVE_MORNING_BRIEF_FRESHNESS_WINDOW_HOURS } from "./live-candidates";
+import { isMorningBriefEligible, MAX_MORNING_BRIEF_ELIGIBILITY_WINDOW_HOURS } from "./freshness-policy";
 import { needsLiveMorningBriefClassification } from "./live-processing-contract";
 import { LIVE_INGESTION_BATCH_LIMITS, LIVE_INGESTION_CANDIDATE_LIMITS, LIVE_PENDING_AI_TIMEOUT_MS, LIVE_PENDING_BATCH_SIZE, LIVE_PENDING_SCAN_LIMIT } from "./sources/config";
 import { mapBounded } from "./ingestion-runtime";
@@ -88,7 +88,7 @@ function hasCurrentEmbedding(article: LiveArticle, classification: LiveClassific
 }
 
 async function listPendingArticles(db: SupabaseClient<Database>, now = new Date()): Promise<PendingArticle[]> {
-  const cutoff = new Date(now.getTime() - LIVE_MORNING_BRIEF_FRESHNESS_WINDOW_HOURS * 3_600_000).toISOString();
+  const cutoff = new Date(now.getTime() - MAX_MORNING_BRIEF_ELIGIBILITY_WINDOW_HOURS * 3_600_000).toISOString();
   const { data: articles, error } = await db.from("morning_brief_articles").select("*").contains("raw_metadata_json", { live_public_source: true }).gte("published_at", cutoff).order("fetched_at", { ascending: false }).limit(LIVE_PENDING_SCAN_LIMIT);
   if (error) throw error;
   const ids = (articles ?? []).map((article) => article.id); if (!ids.length) return [];
@@ -99,6 +99,7 @@ async function listPendingArticles(db: SupabaseClient<Database>, now = new Date(
   const classificationByArticle = new Map<string, LiveClassification>(); for (const item of classifications ?? []) if (!classificationByArticle.has(item.article_id)) classificationByArticle.set(item.article_id, item);
   const embeddingHashes = new Map<string, Set<string>>(); for (const item of embeddings ?? []) embeddingHashes.set(item.article_id, new Set([...(embeddingHashes.get(item.article_id) ?? []), item.input_hash]));
   return (articles ?? []).flatMap((article): PendingArticle[] => {
+    if (!isMorningBriefEligible(article.published_at, { rawMetadata: metadata(article), contentType: article.content_type }, now)) return [];
     const candidate = candidateFromArticle(article); const classification = classificationByArticle.get(article.id) ?? null; const needsClassification = !hasCurrentClassification(article, classification);
     return needsClassification || !hasCurrentEmbedding(article, classification, embeddingHashes.get(article.id)) ? [{ article, candidate, needsClassification }] : [];
   });
@@ -133,7 +134,7 @@ async function persistClassification(db: SupabaseClient<Database>, pending: Pend
 export type IngestMorningBriefSourcesOptions = { sources?: readonly MorningBriefSourceAdapter[]; now?: Date; db?: SupabaseClient<Database> };
 /** Fetches and persists only; AI work is deliberately resumed in separate requests. */
 export async function ingestMorningBriefSources({ sources = MORNING_BRIEF_SOURCE_ADAPTERS, now = new Date(), db = createServiceSupabaseClient() }: IngestMorningBriefSourcesOptions = {}) {
-  const startedAt = Date.now(); const sourceIds = await ensureLiveSources(db); const cutoff = now.getTime() - 48 * 3_600_000;
+  const startedAt = Date.now(); const sourceIds = await ensureLiveSources(db);
   const prepared = await Promise.all(sources.map(async (source) => {
     const summary = emptySummary(source.sourceSlug);
     try {
@@ -142,7 +143,7 @@ export async function ingestMorningBriefSources({ sources = MORNING_BRIEF_SOURCE
       const sourceFiltered = candidates.length - relevant.length;
       const dated = relevant.filter((candidate) => Number.isFinite(Date.parse(candidate.publishedAt)));
       summary.invalid = relevant.length - dated.length;
-      const recent = dated.filter((candidate) => Date.parse(candidate.publishedAt) >= cutoff);
+      const recent = dated.filter((candidate) => isMorningBriefEligible(candidate.publishedAt, { rawMetadata: candidate.rawMetadata, contentType: candidate.contentType }, now));
       summary.stale = dated.length - recent.length;
       summary.parsed = recent.length;
       const limited = recent.slice(0, LIVE_INGESTION_CANDIDATE_LIMITS[source.sourceSlug] ?? 10);

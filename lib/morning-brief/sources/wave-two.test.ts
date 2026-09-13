@@ -11,6 +11,7 @@ test("PYN public news index preserves public report metadata and limits parsed c
   const html = `<article class="elementor-post"><h2 class="elementor-post__title"><a href="/en/reviews/2026/pyn-elite-up-in-august/">PYN Elite up 1.8% in August</a></h2><span>06.09.2026</span><div class="elementor-post__excerpt"><p>Vietnam market commentary</p></div></article><article class="elementor-post"><h2 class="elementor-post__title"><a href="/en/blog/2026/investor-letter-3-2026/">Investor Letter 3/2026</a></h2><span>01.09.2026</span></article><a href="/en/news/">Navigation link</a>`;
   const items = parsePynEliteNewsIndex(html, "https://www.pyn.fi/en/news/", 1);
   assert.equal(items.length, 1); assert.equal(items[0]!.sourceSlug, "pyn-elite"); assert.equal(items[0]!.rawMetadata.portfolio_lens, "PYN Elite"); assert.equal(items[0]!.rawMetadata.region, "Vietnam");
+  assert.equal(items[0]!.rawMetadata.freshness_class, "portfolio_manager_update");
   assert.equal(parsePynEliteNewsIndex(html, "https://www.pyn.fi/en/news/", 5).some((item) => item.categories.includes("investor_letter")), true);
   assert.equal(pynContentType("Investor Letter 3/2026"), "investor_letter");
   assert.deepEqual(parsePynEliteNewsIndex("<a href=\"/en/news/\">Navigation link</a>", "https://www.pyn.fi/en/news/", 5), []);

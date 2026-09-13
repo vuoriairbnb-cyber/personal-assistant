@@ -19,7 +19,7 @@ export const federalReserveSourceAdapter: MorningBriefSourceAdapter = {
       const response = await fetchPublicSource(feed.url, { cache: "no-store", headers: { Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml" } }, fetcher);
       if (!response.ok) throw new Error(`Federal Reserve feed unavailable (${response.status}).`);
       return rssCandidates(await response.text(), { sourceSlug: "federal-reserve", language: feed.language, feedUrl: feed.url, maxItems: feed.maxItems })
-        .map((candidate) => ({ ...candidate, rawMetadata: { ...candidate.rawMetadata, source_family: "official_primary_policy", feed_id: feed.id } }));
+        .map((candidate) => ({ ...candidate, rawMetadata: { ...candidate.rawMetadata, source_family: "official_primary_policy", feed_id: feed.id, freshness_class: feed.id === "federal-reserve-monetary" ? "official_macro_release" : "standard_news" } }));
     }));
     const seen = new Set<string>();
     return groups.flat().filter((candidate) => !seen.has(candidate.canonicalUrl) && Boolean(seen.add(candidate.canonicalUrl)));
