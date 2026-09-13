@@ -1,6 +1,7 @@
 import "server-only";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { isProductionMorningBriefCandidate, isTrustedLiveMorningBriefSource } from "./candidate-eligibility";
+import { IMPORT_CLASSIFICATION_VERSION } from "./classification-contract";
 import type { RankingArticle } from "./ranking";
 
 export const LIVE_MORNING_BRIEF_FRESHNESS_WINDOW_HOURS = 48;
@@ -43,7 +44,7 @@ export async function loadLiveMorningBriefCandidates(userId: string, now: Date):
   if (importedError) throw importedError;
   const articles = [...new Map([...(liveArticles ?? []), ...(importedArticles ?? [])].map((article) => [article.id, article])).values()];
   const ids = articles.map((article) => article.id);
-  const { data: classifications, error: classificationError } = ids.length ? await db.from("morning_brief_article_classifications").select("article_id,countries,regions,categories,topics,sectors,companies,event_type,asset_classes,significance,consequence,scope,confidence,primary_section,summary,classification_version,created_at").in("article_id", ids).order("created_at", { ascending: false }) : { data: [], error: null };
+  const { data: classifications, error: classificationError } = ids.length ? await db.from("morning_brief_article_classifications").select("article_id,countries,regions,categories,topics,sectors,companies,event_type,asset_classes,significance,consequence,scope,confidence,primary_section,summary,classification_version,created_at").in("article_id", ids).eq("classification_version", IMPORT_CLASSIFICATION_VERSION).order("created_at", { ascending: false }) : { data: [], error: null };
   if (classificationError) throw classificationError;
   const classificationByArticle = new Map<string, NonNullable<typeof classifications>[number]>();
   for (const classification of classifications ?? []) if (!classificationByArticle.has(classification.article_id)) classificationByArticle.set(classification.article_id, classification);

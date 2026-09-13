@@ -1,7 +1,9 @@
 import { MORNING_BRIEF_CATEGORIES, MORNING_BRIEF_CONTENT_TYPES, MORNING_BRIEF_SECTIONS, isMorningBriefContentType, isMorningBriefSection } from "./taxonomy";
 import type { ExtractedArticle } from "./article-extraction";
 
-export const IMPORT_CLASSIFICATION_VERSION = "morning-brief-claude-classifier-v1";
+/** Bumped when the persisted classifier contract switched from legacy 0–10-like output to calibrated 0–100 scores. */
+export const IMPORT_CLASSIFICATION_VERSION = "morning-brief-openai-classification-calibrated-v2";
+export const isCurrentMorningBriefClassificationVersion = (version: string | null | undefined) => version === IMPORT_CLASSIFICATION_VERSION;
 export type ImportedArticleClassification = {
   countries: string[]; regions: string[]; categories: string[]; topics: string[]; sectors: string[];
   companies: string[]; people: string[]; assetClasses: string[]; funds: string[]; eventType: string | null;

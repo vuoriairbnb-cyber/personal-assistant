@@ -10,6 +10,8 @@ import { normalizeImportUrl } from "./import-url";
 import { MORNING_BRIEF_SOURCE_ADAPTERS } from "./sources";
 import type { MorningBriefSourceAdapter, SourceCandidate, SourceIngestionSummary } from "./sources";
 import { classificationInputHash, liveCandidateContentHash } from "./ingestion-contract";
+import { LIVE_MORNING_BRIEF_FRESHNESS_WINDOW_HOURS } from "./live-candidates";
+import { needsLiveMorningBriefClassification } from "./live-processing-contract";
 import { LIVE_INGESTION_BATCH_LIMITS, LIVE_INGESTION_CANDIDATE_LIMITS, LIVE_PENDING_AI_TIMEOUT_MS, LIVE_PENDING_BATCH_SIZE, LIVE_PENDING_SCAN_LIMIT } from "./sources/config";
 import { mapBounded } from "./ingestion-runtime";
 import { selectMorningBriefPendingBatch } from "./pending-pipeline";
@@ -70,7 +72,8 @@ function hasCurrentClassification(article: LiveArticle, classification: LiveClas
   if (!classification) return false;
   const raw = metadata(article); const currentHash = classificationInputHash(candidateFromArticle(article));
   // Legacy rows predate classified_input_hash; they were only persisted after their old synchronous classifier completed.
-  return typeof raw.classified_input_hash === "string" ? raw.classified_input_hash === currentHash : raw.classification_input_hash === currentHash;
+  const persistedHash = typeof raw.classified_input_hash === "string" ? raw.classified_input_hash : raw.classification_input_hash;
+  return !needsLiveMorningBriefClassification(classification.classification_version, persistedHash, currentHash);
 }
 
 function hasCurrentEmbedding(article: LiveArticle, classification: LiveClassification | null, hashes: Set<string> | undefined) {
@@ -79,8 +82,9 @@ function hasCurrentEmbedding(article: LiveArticle, classification: LiveClassific
   return hashes.has(embeddingInputHash(input));
 }
 
-async function listPendingArticles(db: SupabaseClient<Database>): Promise<PendingArticle[]> {
-  const { data: articles, error } = await db.from("morning_brief_articles").select("*").contains("raw_metadata_json", { live_public_source: true }).order("fetched_at", { ascending: false }).limit(LIVE_PENDING_SCAN_LIMIT);
+async function listPendingArticles(db: SupabaseClient<Database>, now = new Date()): Promise<PendingArticle[]> {
+  const cutoff = new Date(now.getTime() - LIVE_MORNING_BRIEF_FRESHNESS_WINDOW_HOURS * 3_600_000).toISOString();
+  const { data: articles, error } = await db.from("morning_brief_articles").select("*").contains("raw_metadata_json", { live_public_source: true }).gte("published_at", cutoff).order("fetched_at", { ascending: false }).limit(LIVE_PENDING_SCAN_LIMIT);
   if (error) throw error;
   const ids = (articles ?? []).map((article) => article.id); if (!ids.length) return [];
   const [{ data: classifications }, { data: embeddings }] = await Promise.all([
