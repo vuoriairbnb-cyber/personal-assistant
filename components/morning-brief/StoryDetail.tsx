@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { StoryActions } from "@/components/morning-brief/StoryActions";
 import { StoryImage } from "@/components/morning-brief/StoryImage";
 import { getStoryBriefing, type MorningBriefStory, type StoryCoverage } from "@/components/morning-brief/mock-data";
+import type { StoryBriefing } from "@/lib/morning-brief/types";
 
 const contentTypeLabel: Record<StoryCoverage["contentType"], string> = {
   news: "Original reporting",
@@ -13,9 +14,9 @@ const contentTypeLabel: Record<StoryCoverage["contentType"], string> = {
   "local-perspective": "Local perspective",
 };
 
-export function StoryDetail({ story, relatedStories }: { story: MorningBriefStory; relatedStories: MorningBriefStory[] }) {
-  const briefing = getStoryBriefing(story);
-  const coverage: StoryCoverage[] = [
+export function StoryDetail({ story, relatedStories, briefing: suppliedBriefing, coverage: suppliedCoverage }: { story: MorningBriefStory; relatedStories: MorningBriefStory[]; briefing?: StoryBriefing; coverage?: StoryCoverage[] }) {
+  const briefing = suppliedBriefing ?? getStoryBriefing(story);
+  const coverage: StoryCoverage[] = suppliedCoverage?.length ? suppliedCoverage : [
     { source: story.source, title: `Primary coverage: ${story.title}`, contentType: "news", publishedLabel: story.publishedLabel, url: story.sourceUrl },
     ...story.relatedCoverage,
   ];
@@ -36,9 +37,11 @@ export function StoryDetail({ story, relatedStories }: { story: MorningBriefStor
         <p className="mt-4 text-sm text-text-secondary">{story.source} <span aria-hidden>·</span> {story.publishedLabel} <span aria-hidden>·</span> {story.estimatedReadTime}</p>
 
         <section className="mt-9 border-t border-border-subtle pt-7" aria-labelledby="briefing-title">
-          <h2 id="briefing-title" className="font-serif text-2xl text-text-primary">Briefing</h2>
+          <h2 id="briefing-title" className="font-serif text-2xl text-text-primary">Morning Brief Intelligence</h2>
           <div className="mt-4 space-y-5 text-[1.02rem] leading-8 text-text-secondary">{briefing.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div>
         </section>
+
+        {briefing.evidenceNote && <p className="mt-5 rounded-lg bg-sand-200/50 px-4 py-3 text-sm leading-6 text-text-secondary">Evidence note: {briefing.evidenceNote}</p>}
 
         <section className="mt-10 border-l-2 border-accent pl-4" aria-labelledby="why-title">
           <h2 id="why-title" className="font-serif text-2xl text-text-primary">Why this matters to you</h2>
@@ -54,7 +57,7 @@ export function StoryDetail({ story, relatedStories }: { story: MorningBriefStor
 
         <section className="mt-10 border-t border-border-subtle pt-7" aria-labelledby="coverage-title">
           <h2 id="coverage-title" className="font-serif text-2xl text-text-primary">More coverage</h2>
-          <p className="mt-2 text-sm text-text-secondary">Publications represented in this story cluster. Links are mock source actions in this UI phase.</p>
+          <p className="mt-2 text-sm text-text-secondary">Publications represented in this story cluster. Links open the original public source.</p>
           <div className="mt-3 divide-y divide-border-subtle">{coverage.map((item) => <div key={`${item.source}-${item.title}`} className="flex items-center justify-between gap-4 py-4"><div className="min-w-0"><p className="font-medium text-text-primary">{item.source}</p><p className="mt-1 text-sm text-text-secondary">{item.title}</p><p className="mt-1 text-xs text-text-tertiary">{contentTypeLabel[item.contentType]} <span aria-hidden>·</span> {item.publishedLabel}</p></div>{item.url && <a href={item.url} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-accent hover:text-accent-active">Open <ExternalLink size={15} /></a>}</div>)}</div>
         </section>
 

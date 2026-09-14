@@ -1,6 +1,8 @@
 import { IMPORT_CLASSIFICATION_VERSION } from "./classification-contract";
 
 export type MorningBriefGenerationMode = "live" | "mock";
+/** Only development mock generation writes deterministic Story Detail fixtures. */
+export const persistsDeterministicStoryBriefings = (mode: MorningBriefGenerationMode) => mode === "mock";
 
 /** Explicitly supplies generated_at on every upsert without resetting created_at. */
 export function dailyBriefGenerationRecord(userId: string, date: string, generatedAt: string, mode: MorningBriefGenerationMode, liveCandidateCount: number, importedCandidateCount: number) {

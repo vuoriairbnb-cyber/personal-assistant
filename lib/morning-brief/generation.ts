@@ -9,7 +9,7 @@ import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { ensureArticleEmbeddings } from "./embeddings";
 import { loadUserSemanticProfile } from "./semantic-profile";
 import { likedSimilarityFromProfile } from "./semantic";
-import { dailyBriefGenerationRecord, type MorningBriefGenerationMode } from "./generation-contract";
+import { dailyBriefGenerationRecord, persistsDeterministicStoryBriefings, type MorningBriefGenerationMode } from "./generation-contract";
 import { loadLiveMorningBriefCandidates } from "./live-candidates";
 
 const mockUrl = (source: string, id: string) => `https://mock.local/${source.toLowerCase().replace(/[^a-z0-9]+/g, "-")}/${id}`;
@@ -78,7 +78,9 @@ export async function generateMorningBriefForUser(userId: string, { mode, now = 
   await db.from("morning_brief_items").delete().eq("brief_id", brief.id);
   const sections = ["top_5", "vietnam", "credit", "finland", "markets", "politics", "emerging_frontier", "vc_pe", "world", "worth_reading"] as const;
   const byId = new Map(persisted.map((item) => [item.story.id, item])); const items = sections.flatMap((section) => selectSectionFeed(stories, section, section === "top_5" ? 5 : section === "worth_reading" ? 10 : 20).map((story, index) => ({ brief_id: brief.id, story_cluster_id: byId.get(story.id)!.id, article_id: articleId.get(story.primaryArticleId)!, section, rank: index + 1, score: Math.round(story.score.finalScore), score_explanation_json: { reasons: story.score.reasons } }))); await db.from("morning_brief_items").insert(items);
-  for (const { story, id } of persisted) await db.from("morning_brief_story_briefings").upsert({ story_cluster_id: id, ...briefing(story, story.articleIds.map((article) => articleId.get(article)!), mode) }, { onConflict: "story_cluster_id,generation_version" });
+  // Live refresh must never synthesize or overwrite personalized Story Detail
+  // briefings. Deterministic mock rows remain available for development only.
+  if (persistsDeterministicStoryBriefings(mode)) for (const { story, id } of persisted) await db.from("morning_brief_story_briefings").upsert({ story_cluster_id: id, user_id: userId, input_hash: `mock:${story.id}`, evidence_note: "Development mock briefing.", ...briefing(story, story.articleIds.map((article) => articleId.get(article)!), mode) }, { onConflict: "story_cluster_id,user_id,generation_version" });
   return { briefId: brief.id, date, counts: { sources: mockSourceCount, articles: mockArticleCount + real.candidates.length, liveCandidates: real.liveCandidateCount, importedCandidates: real.importedCandidateCount, clusters: persisted.length, items: items.length } };
 }
 
