@@ -5,7 +5,7 @@ import { fetchWithTimeout } from "./request-timeout";
 import { LIVE_AI_TIMEOUT_MS } from "./sources/config";
 import { MORNING_BRIEF_MODELS, assertMorningBriefGenerativeModel } from "./ai-models";
 import { IMPORT_CLASSIFICATION_VERSION } from "./classification-contract";
-import { LIVE_STORY_BRIEFING_VERSION, STORY_BRIEFING_RESPONSE_SCHEMA, STORY_BRIEFING_SYSTEM_PROMPT, assertSafeStoryBriefingInput, buildStoryBriefingInput, isCurrentStoryBriefingCache, parseLiveStoryBriefingOutput, storyBriefingInputHash, type StoryBriefingCoverage, type StoryBriefingInput } from "./story-briefing-contract";
+import { LIVE_STORY_BRIEFING_VERSION, STORY_BRIEFING_RESPONSE_SCHEMA, STORY_BRIEFING_SYSTEM_PROMPT, assertSafeStoryBriefingInput, buildStoryBriefingInput, isCurrentStoryBriefingCache, parseLiveStoryBriefingOutput, storyBriefingFromPersistedRow, storyBriefingInputHash, type StoryBriefingCoverage, type StoryBriefingInput } from "./story-briefing-contract";
 import type { StoryBriefing } from "./types";
 import type { StoryCoverage } from "@/components/morning-brief/mock-data";
 
@@ -13,7 +13,6 @@ type Result = { briefing: StoryBriefing; coverage: StoryCoverage[]; cache: "hit"
 const inFlight = new Map<string, Promise<Result>>();
 const label = (value: string) => `${Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 3_600_000))}h`;
 const coverageType = (relation: string): StoryCoverage["contentType"] => relation === "analysis" ? "analysis" : relation === "local_perspective" ? "local-perspective" : "news";
-const briefingFromRow = (row: { paragraphs_json: string[]; why_it_matters: string; key_takeaways_json: string[]; exposure_path_json: string[] | null; evidence_note: string | null; generated_from_article_ids: string[]; generated_at: string; generation_version: string }): StoryBriefing => ({ paragraphs: row.paragraphs_json, whyItMatters: row.why_it_matters, keyTakeaways: row.key_takeaways_json, exposurePath: row.exposure_path_json ?? undefined, evidenceNote: row.evidence_note ?? undefined, generatedFromArticleIds: row.generated_from_article_ids, generatedAt: row.generated_at, generationVersion: row.generation_version });
 
 async function loadInput(userId: string, storyId: string): Promise<{ input: StoryBriefingInput; coverage: StoryCoverage[] }> {
   const db = createServiceSupabaseClient();
@@ -42,7 +41,9 @@ async function loadInput(userId: string, storyId: string): Promise<{ input: Stor
 
 function fallback(input: StoryBriefingInput): StoryBriefing {
   const primary = input.coverage[0]!; const summary = primary.classification?.summary ?? primary.excerpt ?? input.cluster.summary ?? "Only limited public source metadata is available for this story.";
-  return { paragraphs: [summary], whyItMatters: primary.classification?.whyItMatters ?? "This story is included because it matches the current Morning Brief selection.", keyTakeaways: (primary.classification?.topics ?? ["Limited public evidence available"]).slice(0, 4), exposurePath: [], evidenceNote: input.evidenceLimited ? "Source detail is limited to public metadata; no additional conclusions are inferred." : "This is a deterministic fallback while the intelligence briefing is unavailable.", generatedFromArticleIds: input.coverage.map((item) => item.articleId), generationVersion: "safe-fallback-v1" };
+  const topics = primary.classification?.topics ?? ["Limited public evidence available"];
+  const takeaways = [...topics, "The available source evidence remains limited.", "Follow-up reporting may materially change the interpretation."].slice(0, 3);
+  return { paragraphs: [summary], whyItMatters: primary.classification?.whyItMatters ?? "This story is included because it matches the current Morning Brief selection.", keyTakeaways: takeaways, evidenceNote: input.evidenceLimited ? "Source detail is limited to public metadata; no additional conclusions are inferred." : "This is a deterministic fallback while the intelligence briefing is unavailable.", generatedFromArticleIds: input.coverage.map((item) => item.articleId), generationVersion: "safe-fallback-v1" };
 }
 
 async function synthesize(input: StoryBriefingInput): Promise<StoryBriefing> {
@@ -53,17 +54,17 @@ async function synthesize(input: StoryBriefingInput): Promise<StoryBriefing> {
   const response = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model, messages: [{ role: "system", content: STORY_BRIEFING_SYSTEM_PROMPT }, { role: "user", content: JSON.stringify(input) }], response_format: { type: "json_schema", json_schema: STORY_BRIEFING_RESPONSE_SCHEMA } }) }, LIVE_AI_TIMEOUT_MS);
   if (!response.ok) throw new Error(`Story briefing unavailable (${response.status}).`);
   const body = await response.json() as { choices?: Array<{ message?: { content?: string } }> }; const content = body.choices?.[0]?.message?.content; if (!content) throw new Error("Story briefing returned no structured content.");
-  const parsed = parseLiveStoryBriefingOutput(JSON.parse(content)); return { paragraphs: parsed.briefing, whyItMatters: parsed.whyThisMatters, keyTakeaways: parsed.keyTakeaways, exposurePath: parsed.exposurePath, evidenceNote: parsed.evidenceNote, generatedFromArticleIds: input.coverage.map((item) => item.articleId), generationVersion: LIVE_STORY_BRIEFING_VERSION, generatedAt: new Date().toISOString() };
+  const parsed = parseLiveStoryBriefingOutput(JSON.parse(content), { evidenceLimited: input.evidenceLimited }); return { paragraphs: parsed.briefing, whyItMatters: parsed.whyThisMatters, keyTakeaways: parsed.keyTakeaways, evidenceNote: parsed.evidenceNote ?? undefined, generatedFromArticleIds: input.coverage.map((item) => item.articleId), generationVersion: LIVE_STORY_BRIEFING_VERSION, generatedAt: new Date().toISOString() };
 }
 
 async function resolveStoryBriefing(userId: string, storyId: string): Promise<Result> {
   const { input, coverage } = await loadInput(userId, storyId); const hash = storyBriefingInputHash(input); const db = createServiceSupabaseClient();
   const { data: cached } = await db.from("morning_brief_story_briefings").select("*").eq("story_cluster_id", storyId).eq("user_id", userId).eq("generation_version", LIVE_STORY_BRIEFING_VERSION).maybeSingle();
-  if (isCurrentStoryBriefingCache(cached ? { userId: cached.user_id, inputHash: cached.input_hash, generationVersion: cached.generation_version } : null, userId, hash)) return { briefing: briefingFromRow(cached!), coverage, cache: "hit" };
+  if (isCurrentStoryBriefingCache(cached ? { userId: cached.user_id, inputHash: cached.input_hash, generationVersion: cached.generation_version } : null, userId, hash)) return { briefing: storyBriefingFromPersistedRow(cached!), coverage, cache: "hit" };
   try {
     const briefing = await synthesize(input);
-    const { data: persisted, error } = await db.from("morning_brief_story_briefings").upsert({ story_cluster_id: storyId, user_id: userId, input_hash: hash, paragraphs_json: briefing.paragraphs, why_it_matters: briefing.whyItMatters, key_takeaways_json: briefing.keyTakeaways, exposure_path_json: briefing.exposurePath ?? [], evidence_note: briefing.evidenceNote ?? null, generated_from_article_ids: briefing.generatedFromArticleIds ?? [], generation_version: LIVE_STORY_BRIEFING_VERSION, generated_at: briefing.generatedAt }, { onConflict: "story_cluster_id,user_id,generation_version" }).select("*").single();
-    if (error || !persisted) throw error ?? new Error("Story briefing persistence failed."); return { briefing: briefingFromRow(persisted), coverage, cache: "generated" };
+    const { data: persisted, error } = await db.from("morning_brief_story_briefings").upsert({ story_cluster_id: storyId, user_id: userId, input_hash: hash, paragraphs_json: briefing.paragraphs, why_it_matters: briefing.whyItMatters, key_takeaways_json: briefing.keyTakeaways, evidence_note: briefing.evidenceNote ?? null, generated_from_article_ids: briefing.generatedFromArticleIds ?? [], generation_version: LIVE_STORY_BRIEFING_VERSION, generated_at: briefing.generatedAt }, { onConflict: "story_cluster_id,user_id,generation_version" }).select("*").single();
+    if (error || !persisted) throw error ?? new Error("Story briefing persistence failed."); return { briefing: storyBriefingFromPersistedRow(persisted), coverage, cache: "generated" };
   } catch { return { briefing: fallback(input), coverage, cache: "fallback" }; }
 }
 

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { MORNING_BRIEF_MODELS, resolveMorningBriefModels } from "./ai-models";
-import { LIVE_STORY_BRIEFING_VERSION, STORY_BRIEFING_SYSTEM_PROMPT, assertSafeStoryBriefingInput, buildStoryBriefingInput, isCurrentStoryBriefingCache, parseLiveStoryBriefingOutput, storyBriefingInputHash } from "./story-briefing-contract";
+import { LIVE_STORY_BRIEFING_VERSION, STORY_BRIEFING_SYSTEM_PROMPT, assertSafeStoryBriefingInput, buildStoryBriefingInput, isCurrentStoryBriefingCache, parseLiveStoryBriefingOutput, storyBriefingFromPersistedRow, storyBriefingInputHash } from "./story-briefing-contract";
+import { normalizeStoryTakeaway } from "./story-briefing-display";
 import { persistsDeterministicStoryBriefings } from "./generation-contract";
 
 const input = (overrides: Record<string, unknown> = {}) => buildStoryBriefingInput({
@@ -14,10 +15,11 @@ const input = (overrides: Record<string, unknown> = {}) => buildStoryBriefingInp
   ...overrides,
 } as never);
 
-test("story briefing cache is user-specific and never reuses legacy shared rows", () => {
+test("story briefing v2 cache is user-specific and never reuses legacy v1 rows", () => {
   const hash = storyBriefingInputHash(input());
   assert.equal(isCurrentStoryBriefingCache({ userId: "user-a", inputHash: hash, generationVersion: LIVE_STORY_BRIEFING_VERSION }, "user-a", hash), true);
   assert.equal(isCurrentStoryBriefingCache({ userId: "user-a", inputHash: hash, generationVersion: LIVE_STORY_BRIEFING_VERSION }, "user-b", hash), false);
+  assert.equal(isCurrentStoryBriefingCache({ userId: "user-a", inputHash: hash, generationVersion: "morning-brief-terra-briefing-v1" }, "user-a", hash), false);
   assert.equal(isCurrentStoryBriefingCache({ userId: null, inputHash: null, generationVersion: "live-briefing-v1" }, "user-a", hash), false);
 });
 
@@ -35,9 +37,29 @@ test("multi-source and metadata-only inputs stay safe, deterministic, and vector
   assert.throws(() => assertSafeStoryBriefingInput({ ...multi, embedding: [1, 2] } as never));
 });
 
-test("structured briefing validates output, stays Terra-only, and defends against source instructions", () => {
-  const output = parseLiveStoryBriefingOutput({ briefing: ["Evidence-based paragraph."], whyThisMatters: "Relevant to PYN Elite.", keyTakeaways: ["One", "Two", "Three"], exposurePath: ["PYN Elite", "Vietnam"], evidenceNote: "Public evidence is limited." });
-  assert.equal(output.keyTakeaways.length, 3); assert.equal(resolveMorningBriefModels().advanced, MORNING_BRIEF_MODELS.advanced); assert.equal(STORY_BRIEFING_SYSTEM_PROMPT.includes("untrusted DATA"), true); assert.equal(STORY_BRIEFING_SYSTEM_PROMPT.includes("PYN Elite argues"), true);
+test("structured v2 briefing has exactly three clean takeaways, no exposure path, and stays Terra-only", () => {
+  const paragraphs = ["One.", "Two.", "Three.", "Four."];
+  const output = parseLiveStoryBriefingOutput({ briefing: paragraphs, whyThisMatters: "Relevant to PYN Elite.", keyTakeaways: ["1The proposal remains provisional.", "• Official details matter.", "3. Credit effects are limited."], exposurePath: ["Legacy data is ignored"], evidenceNote: null });
+  assert.deepEqual(output.keyTakeaways, ["The proposal remains provisional.", "Official details matter.", "Credit effects are limited."]);
+  assert.equal("exposurePath" in output, false); assert.equal(resolveMorningBriefModels().advanced, MORNING_BRIEF_MODELS.advanced); assert.equal(STORY_BRIEFING_SYSTEM_PROMPT.includes("untrusted DATA"), true); assert.equal(STORY_BRIEFING_SYSTEM_PROMPT.includes("PYN Elite argues"), true); assert.equal(STORY_BRIEFING_SYSTEM_PROMPT.includes("exactly three"), true);
+});
+
+test("v2 requires four analytical paragraphs with adequate evidence but allows a shorter metadata-only briefing", () => {
+  const base = { whyThisMatters: "Limited evidence.", keyTakeaways: ["One.", "Two.", "Three."], evidenceNote: "Metadata only." };
+  assert.throws(() => parseLiveStoryBriefingOutput({ ...base, briefing: ["Too short."] }));
+  assert.equal(parseLiveStoryBriefingOutput({ ...base, briefing: ["Concise metadata briefing."] }, { evidenceLimited: true }).briefing.length, 1);
+});
+
+test("takeaway display normalization removes leading list artifacts", () => {
+  assert.equal(normalizeStoryTakeaway("1The reported envelope is €200 million."), "The reported envelope is €200 million.");
+  assert.equal(normalizeStoryTakeaway("2. The proposal is not enacted."), "The proposal is not enacted.");
+  assert.equal(normalizeStoryTakeaway("• Direct credit effects remain limited."), "Direct credit effects remain limited.");
+});
+
+test("legacy v1 row with an exposure path remains readable but does not expose it to the v2 UI", () => {
+  const legacy = storyBriefingFromPersistedRow({ paragraphs_json: ["Legacy paragraph."], why_it_matters: "Legacy relevance.", key_takeaways_json: ["1Legacy takeaway."], exposure_path_json: ["Retired", "path"], evidence_note: null, generated_from_article_ids: ["article-a"], generated_at: "2026-09-14T00:00:00Z", generation_version: "morning-brief-terra-briefing-v1" });
+  assert.equal(legacy.keyTakeaways[0], "Legacy takeaway.");
+  assert.equal("exposurePath" in legacy, false);
 });
 
 test("refresh writes mock briefing fixtures only", () => {

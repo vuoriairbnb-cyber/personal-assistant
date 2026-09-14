@@ -7,6 +7,7 @@ import { StoryActions } from "@/components/morning-brief/StoryActions";
 import { StoryImage } from "@/components/morning-brief/StoryImage";
 import { getStoryBriefing, type MorningBriefStory, type StoryCoverage } from "@/components/morning-brief/mock-data";
 import type { StoryBriefing } from "@/lib/morning-brief/types";
+import { normalizeStoryTakeaway } from "@/lib/morning-brief/story-briefing-display";
 
 const contentTypeLabel: Record<StoryCoverage["contentType"], string> = {
   news: "Original reporting",
@@ -45,15 +46,13 @@ export function StoryDetail({ story, relatedStories, briefing: suppliedBriefing,
 
         <section className="mt-10 border-l-2 border-accent pl-4" aria-labelledby="why-title">
           <h2 id="why-title" className="font-serif text-2xl text-text-primary">Why this matters to you</h2>
-          <p className="mt-3 leading-7 text-text-secondary">{briefing.whyItMatters}</p>
+          <div className="mt-3 space-y-4 leading-7 text-text-secondary">{briefing.whyItMatters.split(/\n\s*\n/).filter(Boolean).map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div>
         </section>
 
         <section className="mt-10" aria-labelledby="takeaways-title">
           <h2 id="takeaways-title" className="font-serif text-2xl text-text-primary">Key takeaways</h2>
-          <ul className="mt-3 space-y-3 text-sm leading-6 text-text-secondary">{briefing.keyTakeaways.map((takeaway, index) => <li key={takeaway} className="flex gap-3 border-b border-border-subtle pb-3"><span className="font-serif text-lg text-accent">{index + 1}</span><span>{takeaway}</span></li>)}</ul>
+          <ul className="mt-3 list-disc space-y-3 pl-5 text-sm leading-6 text-text-secondary">{briefing.keyTakeaways.map((takeaway) => <li key={takeaway} className="border-b border-border-subtle pb-3 pl-1 marker:text-accent">{normalizeStoryTakeaway(takeaway)}</li>)}</ul>
         </section>
-
-        {briefing.exposurePath && <section className="mt-10" aria-labelledby="exposure-title"><h2 id="exposure-title" className="font-serif text-2xl text-text-primary">Your exposure</h2><div className="mt-3 flex flex-wrap items-center gap-2 text-sm font-medium text-text-secondary">{briefing.exposurePath.map((part, index) => <span key={part} className="flex items-center gap-2"><span className="rounded-full bg-sand-200 px-3 py-1.5 text-text-primary">{part}</span>{index < briefing.exposurePath!.length - 1 && <span aria-hidden>→</span>}</span>)}</div></section>}
 
         <section className="mt-10 border-t border-border-subtle pt-7" aria-labelledby="coverage-title">
           <h2 id="coverage-title" className="font-serif text-2xl text-text-primary">More coverage</h2>

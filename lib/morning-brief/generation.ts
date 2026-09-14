@@ -33,7 +33,7 @@ export async function ensureMorningBriefProfile(userId: string) {
   const { error } = await db.from("morning_brief_user_preferences").upsert(defaults, { onConflict: "user_id,dimension_type,dimension_key", ignoreDuplicates: true }); if (error) throw error;
 }
 
-function briefing(story: RankedStoryCluster, articleIds: string[], mode: MorningBriefGenerationMode) { return { paragraphs_json: [story.summary, `${mode === "mock" ? "This is a synthetic development briefing" : "This is a live-source briefing"} for ${story.headline}.`], why_it_matters: story.score.reasons[0] ?? "This development is included because of its Morning Brief relevance.", key_takeaways_json: [story.summary, ...story.score.portfolioMatches.slice(0, 2).map((match) => match.reason)], exposure_path_json: story.score.portfolioMatches.map((match) => match.lens), generated_from_article_ids: articleIds, generation_version: mode === "mock" ? "mock-briefing-v1" : "live-briefing-v1" }; }
+function briefing(story: RankedStoryCluster, articleIds: string[], mode: MorningBriefGenerationMode) { return { paragraphs_json: [story.summary, `${mode === "mock" ? "This is a synthetic development briefing" : "This is a live-source briefing"} for ${story.headline}.`], why_it_matters: story.score.reasons[0] ?? "This development is included because of its Morning Brief relevance.", key_takeaways_json: [story.summary, ...story.score.portfolioMatches.slice(0, 2).map((match) => match.reason)].slice(0, 3), generated_from_article_ids: articleIds, generation_version: mode === "mock" ? "mock-briefing-v1" : "live-briefing-v1" }; }
 
 async function loadRealCandidates(userId: string, now: Date) {
   const loaded = await loadLiveMorningBriefCandidates(userId, now);
