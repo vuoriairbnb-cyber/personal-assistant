@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { DAILY_INTELLIGENCE_MAX_EVIDENCE_CHARS, DAILY_INTELLIGENCE_MAX_STORIES, DAILY_INTELLIGENCE_SYSTEM_PROMPT, DAILY_INTELLIGENCE_TIMEOUT_MS, DAILY_INTELLIGENCE_VERSION, assertSafeDailyIntelligenceInput, buildDailyIntelligenceInput, dailyIntelligenceEvidenceChars, dailyIntelligenceInputHash, dailyIntelligencePromptInput, isCurrentDailyIntelligenceCache, parseDailyIntelligenceOutput, selectDailyIntelligenceStories } from "./daily-intelligence-contract";
+import { DAILY_INTELLIGENCE_MAX_EVIDENCE_CHARS, DAILY_INTELLIGENCE_MAX_STORIES, DAILY_INTELLIGENCE_SYSTEM_PROMPT, DAILY_INTELLIGENCE_TIMEOUT_MS, DAILY_INTELLIGENCE_VERSION, assessDailyIntelligenceSignal, assertSafeDailyIntelligenceInput, buildDailyIntelligenceInput, dailyIntelligenceEvidenceChars, dailyIntelligenceInputHash, dailyIntelligencePromptInput, isCurrentDailyIntelligenceCache, parseDailyIntelligenceOutput, selectDailyIntelligenceStories } from "./daily-intelligence-contract";
 import { LIVE_AI_TIMEOUT_MS } from "./sources/config";
 
 const input = (overrides: Record<string, unknown> = {}) => buildDailyIntelligenceInput({
   brief: { id: "brief-a", date: "2026-09-15", version: 1, algorithmVersion: "ranking-v1", classificationVersion: "morning-brief-openai-classification-calibrated-v2" },
   stories: [{ clusterId: "cluster-a", section: "top_5", rank: 1, headline: "Vietnam credit conditions", summary: "A public-source summary.", sources: ["PYN Elite", "Vietnam Statistics"], contentHashes: ["content-a"], classification: { version: "v2", summary: "Current classification", whyItMatters: "Relevant context", topics: ["vietnam credit"], categories: ["markets"], countries: ["vietnam"], sectors: ["financials"] } }],
   personalization: { portfolioLenses: [{ name: "PYN Elite", priority: 90, exposures: [{ type: "country", key: "vietnam", strength: 90 }] }], preferences: [{ type: "topic", key: "vietnam credit", weight: 90, pinned: true }], learnedInterests: [{ type: "topic", key: "vietnam credit", affinity: 74 }] },
-  market: [{ symbol: "VN-Index", label: "VN-Index", value: 1673.8, percentChange: 0.56, direction: "up", asOf: "2026-09-15T12:00:00Z", status: "delayed_or_eod" }],
+  market: [{ symbol: "VN-Index", label: "VN-Index", percentChange: 0.56, direction: "up", status: "delayed_or_eod" }],
   ...overrides,
 } as never);
 const valid = { executiveSummary: ["One substantive paragraph.", "Two substantive paragraph.", "Three substantive paragraph."], mainThemes: [{ title: "Theme one", explanation: "A rigorous explanation." }, { title: "Theme two", explanation: "A rigorous explanation." }, { title: "Theme three", explanation: "A rigorous explanation." }], whyThisMatters: ["Personalized implication one.", "Personalized implication two."], watchNext: ["Watch one.", "Watch two.", "Watch three."], evidenceNote: null };
@@ -48,6 +48,21 @@ test("Daily Intelligence policy is Terra-only and refresh orchestration has no D
   assert.equal(DAILY_INTELLIGENCE_VERSION, "morning-brief-daily-intelligence-v1");
   assert.equal(DAILY_INTELLIGENCE_SYSTEM_PROMPT.toLowerCase().includes("sol"), false);
   assert.equal(DAILY_INTELLIGENCE_SYSTEM_PROMPT.includes("delayed or end-of-day"), true);
+});
+
+test("quality gate is deterministic, requires breadth plus recent materiality, and keeps raw scores out of the prompt", () => {
+  const strong = buildDailyIntelligenceInput({ ...input(), stories: [0, 1, 2, 3].map((index) => ({ clusterId: `signal-${index}`, section: index < 2 ? "top_5" : index === 2 ? "credit" : "markets", rank: index + 1, headline: `Signal ${index}`, summary: "Evidence", sources: [`Source ${index}`], contentHashes: [`signal-${index}`], signal: { importance: 70, portfolioRelevance: 65, learnedPreference: 55, sourceCount: 1, recencyHours: 12 }, classification: null })) });
+  const first = assessDailyIntelligenceSignal(strong); const second = assessDailyIntelligenceSignal(strong);
+  assert.deepEqual(first, second); assert.equal(first.eligible, true); assert.equal(JSON.stringify(dailyIntelligencePromptInput(strong)).includes("portfolioRelevance"), false);
+  const thin = buildDailyIntelligenceInput({ ...input(), stories: [{ ...strong.stories[0]!, sources: ["Only source"], signal: { importance: 45, portfolioRelevance: 30, learnedPreference: 30, sourceCount: 1, recencyHours: 12 } }] });
+  assert.equal(assessDailyIntelligenceSignal(thin).eligible, false);
+});
+
+test("small market moves are bucketed for Daily Intelligence cache stability while material moves invalidate", () => {
+  const first = input({ market: [{ symbol: "VN-Index", label: "VN-Index", percentChange: 0.11, direction: "up", status: "delayed_or_eod" }] });
+  const trivial = input({ market: [{ symbol: "VN-Index", label: "VN-Index", percentChange: 0.12, direction: "up", status: "delayed_or_eod" }] });
+  const material = input({ market: [{ symbol: "VN-Index", label: "VN-Index", percentChange: 1.4, direction: "up", status: "delayed_or_eod" }] });
+  assert.equal(dailyIntelligenceInputHash(first), dailyIntelligenceInputHash(trivial)); assert.notEqual(dailyIntelligenceInputHash(first), dailyIntelligenceInputHash(material));
 });
 
 const story = (index: number, section = index < 5 ? "top_5" : ["vietnam", "credit", "markets", "finland"][index % 4]!, clusterId = `cluster-${index}`) => ({ clusterId, section, rank: index + 1, selectionPriority: 100 - index, headline: `Headline ${index}`, summary: "Evidence ".repeat(100), sources: ["Public source"], contentHashes: [`hash-${index}`], classification: { version: "v2", summary: "Classified context.", whyItMatters: "Relevant context.", topics: ["markets"], categories: [section], countries: [], sectors: [] } });

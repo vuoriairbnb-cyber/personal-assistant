@@ -6,10 +6,10 @@ import { MORNING_BRIEF_MODELS, assertMorningBriefGenerativeModel } from "./ai-mo
 import { getMarketPulse } from "./market-pulse";
 import { IMPORT_CLASSIFICATION_VERSION } from "./classification-contract";
 import { DAILY_INTELLIGENCE_RESPONSE_SCHEMA, DAILY_INTELLIGENCE_SYSTEM_PROMPT, DAILY_INTELLIGENCE_TIMEOUT_MS, DAILY_INTELLIGENCE_VERSION, assertSafeDailyIntelligenceInput, buildDailyIntelligenceInput, dailyIntelligencePromptInput, parseDailyIntelligenceOutput, type DailyIntelligence, type DailyIntelligenceInput } from "./daily-intelligence-contract";
-import { resolveDailyIntelligenceFlow } from "./daily-intelligence-flow";
+import { resolveDailyIntelligenceFlow, type DailyIntelligenceFlowResult } from "./daily-intelligence-flow";
 
-type DailyResult = { state: "ready" | "stale"; intelligence: DailyIntelligence | null };
-const inFlight = new Map<string, Promise<DailyIntelligence>>();
+type DailyResult = DailyIntelligenceFlowResult;
+const inFlight = new Map<string, Promise<DailyResult>>();
 const safeError = (error: unknown) => ({ name: error instanceof Error ? error.name : "UnknownError", message: error instanceof Error ? error.message.slice(0, 180) : "Unknown error", status: typeof error === "object" && error && "status" in error && typeof (error as { status?: unknown }).status === "number" ? (error as { status: number }).status : undefined });
 const log = (event: string, details: Record<string, unknown> = {}) => console.info(`[daily-intelligence] ${event}`, details);
 
@@ -35,7 +35,7 @@ async function loadDailyInput(userId: string): Promise<DailyIntelligenceInput | 
     db.from("morning_brief_portfolio_exposures").select("portfolio_asset_id,exposure_type,exposure_key,relevance_strength").eq("user_id", userId),
     db.from("morning_brief_user_preferences").select("dimension_type,dimension_key,explicit_weight,pinned").eq("user_id", userId),
     db.from("morning_brief_learned_interests").select("dimension_type,dimension_key,affinity_score").eq("user_id", userId),
-    db.from("morning_brief_scores").select("story_cluster_id,portfolio_relevance,learned_preference,final_score,created_at").eq("user_id", userId).in("story_cluster_id", clusterIds).order("created_at", { ascending: false }),
+    db.from("morning_brief_scores").select("story_cluster_id,portfolio_relevance,learned_preference,importance_score,final_score,created_at").eq("user_id", userId).in("story_cluster_id", clusterIds).order("created_at", { ascending: false }),
     getMarketPulse(),
   ]);
   const articleMap = new Map((articles ?? []).map((article) => [article.id, article])); const sourceMap = new Map((sources ?? []).map((source) => [source.id, source.name]));
@@ -53,9 +53,10 @@ async function loadDailyInput(userId: string): Promise<DailyIntelligenceInput | 
     const clusterArticleIds = articleIdsByCluster.get(cluster.id) ?? []; const covered = clusterArticleIds.map((id) => articleMap.get(id)).filter((article): article is NonNullable<typeof articles>[number] => Boolean(article));
     const primary = cluster.primary_article_id ? articleMap.get(cluster.primary_article_id) : covered[0]; if (!primary) return [];
     const classification = classificationsByArticle.get(primary.id);
-    const score = scoreByCluster.get(cluster.id); return [{ clusterId: cluster.id, section: item.section, rank: item.rank, selectionPriority: (score?.portfolio_relevance ?? 0) * 2 + (score?.learned_preference ?? 0) + (score?.final_score ?? 0), headline: cluster.canonical_headline ?? primary.title, summary: cluster.canonical_summary ?? classification?.summary ?? primary.excerpt, sources: covered.map((article) => sourceMap.get(article.source_id) ?? "Public source"), contentHashes: covered.map((article) => article.content_hash ?? ""), classification: classification ? { version: classification.classification_version, summary: classification.summary, whyItMatters: classification.why_it_matters, topics: classification.topics, categories: classification.categories, countries: classification.countries, sectors: classification.sectors } : null }];
+    const score = scoreByCluster.get(cluster.id); const recencyHours = cluster.latest_published_at ? Math.max(0, Math.round((new Date(brief.generated_at).getTime() - new Date(cluster.latest_published_at).getTime()) / 3_600_000)) : null;
+    return [{ clusterId: cluster.id, section: item.section, rank: item.rank, selectionPriority: (score?.portfolio_relevance ?? 0) * 2 + (score?.learned_preference ?? 0) + (score?.final_score ?? 0), signal: { importance: score?.importance_score ?? 0, portfolioRelevance: score?.portfolio_relevance ?? 0, learnedPreference: score?.learned_preference ?? 0, sourceCount: cluster.source_count ?? covered.length, recencyHours }, headline: cluster.canonical_headline ?? primary.title, summary: cluster.canonical_summary ?? classification?.summary ?? primary.excerpt, sources: covered.map((article) => sourceMap.get(article.source_id) ?? "Public source"), contentHashes: covered.map((article) => article.content_hash ?? ""), classification: classification ? { version: classification.classification_version, summary: classification.summary, whyItMatters: classification.why_it_matters, topics: classification.topics, categories: classification.categories, countries: classification.countries, sectors: classification.sectors } : null }];
   });
-  const market = marketQuotes.map((quote) => ({ symbol: quote.symbol, label: quote.label, value: quote.value, percentChange: quote.percentChange, direction: quote.percentChange > 0 ? "up" as const : quote.percentChange < 0 ? "down" as const : "flat" as const, asOf: quote.asOf, status: quote.status }));
+  const market = marketQuotes.map((quote) => ({ symbol: quote.symbol, label: quote.label, percentChange: quote.percentChange, direction: quote.percentChange > 0 ? "up" as const : quote.percentChange < 0 ? "down" as const : "flat" as const, status: quote.status }));
   const input = buildDailyIntelligenceInput({
     brief: { id: brief.id, date: brief.brief_date, version: brief.brief_version, algorithmVersion: brief.algorithm_version, classificationVersion: brief.classification_version }, stories,
     personalization: { portfolioLenses: [...assetMap.values()].map((asset) => ({ name: asset.name, priority: asset.priority, exposures: (exposures ?? []).filter((exposure) => exposure.portfolio_asset_id === asset.id).map((exposure) => ({ type: exposure.exposure_type, key: exposure.exposure_key, strength: exposure.relevance_strength })) })), preferences: (preferences ?? []).map((preference) => ({ type: preference.dimension_type, key: preference.dimension_key, weight: preference.explicit_weight, pinned: preference.pinned })), learnedInterests: (learned ?? []).map((interest) => ({ type: interest.dimension_type, key: interest.dimension_key, affinity: interest.affinity_score })) }, market,
@@ -93,4 +94,4 @@ async function resolve(userId: string, generate: boolean): Promise<DailyResult> 
 /** Read-only dashboard lookup: it never calls Terra. */
 export async function getDailyIntelligenceForCurrentUser() { const { user } = await requireApprovedUser(); return resolve(user.id, false); }
 /** Explicit user action only. Per-process coalescing prevents duplicate paid calls. */
-export async function generateDailyIntelligenceForCurrentUser() { const { user } = await requireApprovedUser(); const task = inFlight.get(user.id) ?? resolve(user.id, true).then((result) => { if (!result.intelligence) throw new Error("Morning Brief is not ready."); return result.intelligence; }).finally(() => inFlight.delete(user.id)); inFlight.set(user.id, task); return task; }
+export async function generateDailyIntelligenceForCurrentUser() { const { user } = await requireApprovedUser(); const task = inFlight.get(user.id) ?? resolve(user.id, true).finally(() => inFlight.delete(user.id)); inFlight.set(user.id, task); return task; }

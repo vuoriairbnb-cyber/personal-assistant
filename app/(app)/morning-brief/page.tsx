@@ -8,5 +8,5 @@ export const maxDuration = 60;
 
 export default async function MorningBriefPage() {
   const [persisted, marketQuotes, daily] = await Promise.all([getMorningBriefForUser(), getMarketPulse(), getDailyIntelligenceForCurrentUser()]);
-  return <MorningBriefDashboard persisted={persisted?.sections ?? null} marketQuotes={marketQuotes} dailyIntelligence={daily.intelligence} />;
+  return <MorningBriefDashboard persisted={persisted?.sections ?? null} briefMeta={persisted ? { date: persisted.brief.brief_date, generatedAt: persisted.brief.generated_at } : null} marketQuotes={marketQuotes} daily={daily} />;
 }
