@@ -19,7 +19,7 @@ export async function refreshMorningBriefMarketData() {
 /** Paid synthesis is deliberately separate from Refresh and only runs on an explicit click. */
 export async function generateMorningBriefDailyIntelligence() {
   try { const intelligence = await generateDailyIntelligenceForCurrentUser(); revalidatePath("/morning-brief"); return { ok: true, intelligence }; }
-  catch { return { ok: false, error: "Could not generate Daily Intelligence. Please try again." }; }
+  catch (error) { console.warn("[daily-intelligence] action failed", { name: error instanceof Error ? error.name : "UnknownError", message: error instanceof Error ? error.message.slice(0, 180) : "Unknown error" }); return { ok: false, error: "Could not generate Daily Intelligence. Please try again." }; }
 }
 
 export async function regenerateMorningBrief() {
