@@ -1,13 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { fetchLiveMorningBriefSources, processMorningBriefPendingBatchAction, regenerateMorningBrief } from "@/lib/actions/morning-brief";
+import { fetchLiveMorningBriefSources, processMorningBriefPendingBatchAction, regenerateMorningBrief, refreshMorningBriefMarketData } from "@/lib/actions/morning-brief";
 import { formatIngestionSummary } from "@/lib/morning-brief/action-state";
 import { createMorningBriefRefreshRunner, type RefreshProgress } from "@/lib/morning-brief/refresh-orchestration";
 
 export function MockBriefGenerator() {
   const [running, setRunning] = useState(false); const [message, setMessage] = useState<string | null>(null); const [progress, setProgress] = useState<RefreshProgress | null>(null);
-  const runner = useRef(createMorningBriefRefreshRunner({ fetch: fetchLiveMorningBriefSources, processBatch: processMorningBriefPendingBatchAction, regenerate: regenerateMorningBrief })).current;
+  const runner = useRef(createMorningBriefRefreshRunner({ fetch: fetchLiveMorningBriefSources, processBatch: processMorningBriefPendingBatchAction, regenerate: regenerateMorningBrief, refreshMarket: refreshMorningBriefMarketData })).current;
 
   const refresh = async () => {
     setRunning(true); setMessage(null);

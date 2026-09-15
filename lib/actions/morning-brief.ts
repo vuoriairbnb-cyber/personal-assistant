@@ -7,6 +7,20 @@ import { applyMorningBriefLearningSignal } from "@/lib/morning-brief/feedback-se
 import { importMorningBriefUrl } from "@/lib/morning-brief/import-service";
 import { shouldApplyImportSignal } from "@/lib/morning-brief/import-dedup";
 import { getMorningBriefPendingArticleCount, ingestMorningBriefSources, processMorningBriefPendingBatch } from "@/lib/morning-brief/ingestion";
+import { refreshMarketPulse } from "@/lib/morning-brief/market-pulse";
+import { generateDailyIntelligenceForCurrentUser } from "@/lib/morning-brief/daily-intelligence";
+
+/** Protected, non-AI market refresh. Its failure never blocks article processing. */
+export async function refreshMorningBriefMarketData() {
+  try { await requireApprovedUser(); const result = await refreshMarketPulse(); revalidatePath("/morning-brief"); return result.ok ? { ok: true } : { ok: false, error: "Market data is temporarily unavailable." }; }
+  catch { return { ok: false, error: "Could not refresh market data." }; }
+}
+
+/** Paid synthesis is deliberately separate from Refresh and only runs on an explicit click. */
+export async function generateMorningBriefDailyIntelligence() {
+  try { const intelligence = await generateDailyIntelligenceForCurrentUser(); revalidatePath("/morning-brief"); return { ok: true, intelligence }; }
+  catch { return { ok: false, error: "Could not generate Daily Intelligence. Please try again." }; }
+}
 
 export async function regenerateMorningBrief() {
   try { const { user } = await requireApprovedUser(); if (await getMorningBriefPendingArticleCount()) return { ok: false, error: "Finish live article processing before regenerating Morning Brief." }; await generateMorningBriefForUser(user.id, { mode: "live", now: new Date() }); revalidatePath("/morning-brief"); return { ok: true }; } catch { return { ok: false, error: "Could not regenerate the Morning Brief." }; }

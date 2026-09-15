@@ -3,7 +3,8 @@ import type { SourceIngestionSummary } from "./sources/types";
 export type RefreshFetchResult = { ok: boolean; error?: string; summary?: { sources: SourceIngestionSummary[]; pending: number } };
 export type RefreshBatchResult = { ok: boolean; error?: string; summary?: { processed: number; failed: number; remaining: number; luna: number; lunaAccepted: number; terra: number; embedded: number; errors: string[] } };
 export type RefreshRegenerateResult = { ok: boolean; error?: string };
-export type RefreshActions = { fetch: () => Promise<RefreshFetchResult>; processBatch: () => Promise<RefreshBatchResult>; regenerate: () => Promise<RefreshRegenerateResult> };
+export type RefreshMarketResult = { ok: boolean; error?: string };
+export type RefreshActions = { fetch: () => Promise<RefreshFetchResult>; processBatch: () => Promise<RefreshBatchResult>; regenerate: () => Promise<RefreshRegenerateResult>; refreshMarket?: () => Promise<RefreshMarketResult> };
 export type RefreshProgress = { phase: "fetching" | "processing" | "ranking"; total: number; processed: number; failed: number; remaining: number; sources?: SourceIngestionSummary[] };
 export type RefreshResult = { ok: boolean; reason?: "already_running" | "fetch_failed" | "processing_failed" | "regeneration_failed"; error?: string; processed: number; failed: number; sources: SourceIngestionSummary[] };
 
@@ -15,7 +16,7 @@ export function createMorningBriefRefreshRunner(actions: RefreshActions) {
     running = true;
     try {
       onProgress({ phase: "fetching", total: 0, processed: 0, failed: 0, remaining: 0 });
-      const fetched = await actions.fetch();
+      const [fetched] = await Promise.all([actions.fetch(), actions.refreshMarket ? actions.refreshMarket().catch(() => ({ ok: false })) : Promise.resolve({ ok: true })]);
       if (!fetched.ok || !fetched.summary) return { ok: false, reason: "fetch_failed", error: fetched.error, processed: 0, failed: 0, sources: [] };
       const sources = fetched.summary.sources; const total = fetched.summary.pending; let remaining = total; let processed = 0; let failed = 0;
       while (remaining > 0) {

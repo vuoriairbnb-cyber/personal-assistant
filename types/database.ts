@@ -435,6 +435,12 @@ export type Database = {
         Insert: { id?: string; user_id: string; brief_date: string; brief_version?: number; generated_at?: string; status?: "generating" | "ready" | "failed" | "archived"; summary_text?: string | null; algorithm_version: string; classification_version?: string | null; estimated_read_minutes?: number | null; metadata_json?: Record<string, unknown>; [key: string]: unknown; };
         Update: { status?: "generating" | "ready" | "failed" | "archived"; summary_text?: string | null; classification_version?: string | null; estimated_read_minutes?: number | null; metadata_json?: Record<string, unknown>; [key: string]: unknown; }; Relationships: [];
       };
+      morning_brief_daily_intelligence: {
+        Row: { id: string; user_id: string; morning_brief_id: string; input_hash: string; generation_version: string; executive_summary_json: string[]; main_themes_json: Array<{ title: string; explanation: string }>; why_this_matters_json: string[]; watch_next_json: string[]; evidence_note: string | null; generated_at: string; created_at: string; updated_at: string; [key: string]: unknown; };
+        Insert: { id?: string; user_id: string; morning_brief_id: string; input_hash: string; generation_version: string; executive_summary_json: string[]; main_themes_json: Array<{ title: string; explanation: string }>; why_this_matters_json: string[]; watch_next_json: string[]; evidence_note?: string | null; generated_at?: string; [key: string]: unknown; };
+        Update: { input_hash?: string; executive_summary_json?: string[]; main_themes_json?: Array<{ title: string; explanation: string }>; why_this_matters_json?: string[]; watch_next_json?: string[]; evidence_note?: string | null; generated_at?: string; [key: string]: unknown; };
+        Relationships: [];
+      };
       morning_brief_items: {
         Row: { id: string; brief_id: string; story_cluster_id: string | null; article_id: string | null; section: MorningBriefSection; rank: number; score: number | null; score_explanation_json: Record<string, unknown> | null; created_at: string; [key: string]: unknown; };
         Insert: { id?: string; brief_id: string; story_cluster_id?: string | null; article_id?: string | null; section: MorningBriefSection; rank: number; score?: number | null; score_explanation_json?: Record<string, unknown> | null; [key: string]: unknown; };

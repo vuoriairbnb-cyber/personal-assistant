@@ -10,6 +10,11 @@ test("refresh fetches first, processes bounded batches sequentially, then regene
   const result = await run(() => undefined); assert.equal(result.ok, true); assert.deepEqual(calls, ["fetch", "batch", "batch", "regenerate"]); assert.equal(result.processed, 5);
 });
 
+test("market refresh is invoked independently and cannot block the article workflow", async () => {
+  const calls: string[] = []; const run = createMorningBriefRefreshRunner({ fetch: async () => { calls.push("fetch"); return { ok: true, summary: { sources: [source], pending: 0 } }; }, refreshMarket: async () => { calls.push("market"); return { ok: false, error: "Provider unavailable" }; }, processBatch: async () => { throw new Error("No batch expected"); }, regenerate: async () => { calls.push("regenerate"); return { ok: true }; } });
+  const result = await run(() => undefined); assert.equal(result.ok, true); assert.equal(calls.includes("market"), true); assert.equal(calls.includes("regenerate"), true);
+});
+
 test("refresh never regenerates partial work and stops a permanently non-progressing batch", async () => {
   const calls: string[] = []; const run = createMorningBriefRefreshRunner({ fetch: async () => ({ ok: true, summary: { sources: [source], pending: 1 } }), processBatch: async () => { calls.push("batch"); return { ok: true, summary: { processed: 0, failed: 1, remaining: 1, luna: 1, lunaAccepted: 0, terra: 0, embedded: 0, errors: ["Permanent failure"] } }; }, regenerate: async () => { calls.push("regenerate"); return { ok: true }; } });
   const result = await run(() => undefined); assert.equal(result.ok, false); assert.equal(result.reason, "processing_failed"); assert.deepEqual(calls, ["batch"]);
