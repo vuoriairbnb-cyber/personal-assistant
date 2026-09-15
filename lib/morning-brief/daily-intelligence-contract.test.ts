@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { DAILY_INTELLIGENCE_SYSTEM_PROMPT, DAILY_INTELLIGENCE_VERSION, assertSafeDailyIntelligenceInput, buildDailyIntelligenceInput, dailyIntelligenceInputHash, dailyIntelligencePromptInput, isCurrentDailyIntelligenceCache, parseDailyIntelligenceOutput } from "./daily-intelligence-contract";
+import { DAILY_INTELLIGENCE_MAX_EVIDENCE_CHARS, DAILY_INTELLIGENCE_MAX_STORIES, DAILY_INTELLIGENCE_SYSTEM_PROMPT, DAILY_INTELLIGENCE_TIMEOUT_MS, DAILY_INTELLIGENCE_VERSION, assertSafeDailyIntelligenceInput, buildDailyIntelligenceInput, dailyIntelligenceEvidenceChars, dailyIntelligenceInputHash, dailyIntelligencePromptInput, isCurrentDailyIntelligenceCache, parseDailyIntelligenceOutput, selectDailyIntelligenceStories } from "./daily-intelligence-contract";
+import { LIVE_AI_TIMEOUT_MS } from "./sources/config";
 
 const input = (overrides: Record<string, unknown> = {}) => buildDailyIntelligenceInput({
   brief: { id: "brief-a", date: "2026-09-15", version: 1, algorithmVersion: "ranking-v1", classificationVersion: "morning-brief-openai-classification-calibrated-v2" },
@@ -46,4 +48,39 @@ test("Daily Intelligence policy is Terra-only and refresh orchestration has no D
   assert.equal(DAILY_INTELLIGENCE_VERSION, "morning-brief-daily-intelligence-v1");
   assert.equal(DAILY_INTELLIGENCE_SYSTEM_PROMPT.toLowerCase().includes("sol"), false);
   assert.equal(DAILY_INTELLIGENCE_SYSTEM_PROMPT.includes("delayed or end-of-day"), true);
+});
+
+const story = (index: number, section = index < 5 ? "top_5" : ["vietnam", "credit", "markets", "finland"][index % 4]!, clusterId = `cluster-${index}`) => ({ clusterId, section, rank: index + 1, selectionPriority: 100 - index, headline: `Headline ${index}`, summary: "Evidence ".repeat(100), sources: ["Public source"], contentHashes: [`hash-${index}`], classification: { version: "v2", summary: "Classified context.", whyItMatters: "Relevant context.", topics: ["markets"], categories: [section], countries: [], sectors: [] } });
+
+test("bounded Daily Intelligence evidence retains Top 5, deduplicates clusters, prioritizes diverse extras, and respects the budget", () => {
+  const raw = Array.from({ length: 60 }, (_, index) => story(index)); raw.push(story(61, "credit", "cluster-0"));
+  const selected = selectDailyIntelligenceStories(raw); assert.equal(selected.length <= DAILY_INTELLIGENCE_MAX_STORIES, true); assert.deepEqual(selected.filter((item) => item.section === "top_5").map((item) => item.clusterId), ["cluster-0", "cluster-1", "cluster-2", "cluster-3", "cluster-4"]); assert.equal(new Set(selected.map((item) => item.clusterId)).size, selected.length); assert.equal(dailyIntelligenceEvidenceChars(selected) <= DAILY_INTELLIGENCE_MAX_EVIDENCE_CHARS, true); assert.equal(selected.some((item) => item.section === "vietnam"), true); assert.equal(selected.some((item) => item.section === "credit"), true);
+});
+
+test("normalization keeps even five unusually verbose Top 5 stories inside the evidence budget", () => {
+  const verboseTopFive = Array.from({ length: 5 }, (_, index) => ({
+    ...story(index),
+    headline: "H".repeat(5_000),
+    summary: "S".repeat(5_000),
+    sources: ["P".repeat(5_000), "Q".repeat(5_000)],
+    classification: { version: "V".repeat(5_000), summary: "C".repeat(5_000), whyItMatters: "W".repeat(5_000), topics: ["T".repeat(5_000)], categories: ["C".repeat(5_000)], countries: ["U".repeat(5_000)], sectors: ["S".repeat(5_000)] },
+  }));
+  const normalized = buildDailyIntelligenceInput({ ...input(), stories: verboseTopFive });
+  assert.equal(normalized.stories.length, 5);
+  assert.equal(dailyIntelligenceEvidenceChars(normalized.stories) <= DAILY_INTELLIGENCE_MAX_EVIDENCE_CHARS, true);
+});
+
+test("bounded evidence and its hash are deterministic: excluded changes do not invalidate while selected changes do", () => {
+  const raw = Array.from({ length: 60 }, (_, index) => story(index)); const base = buildDailyIntelligenceInput({ ...input(), stories: raw }); const unchanged = buildDailyIntelligenceInput({ ...input(), stories: raw });
+  const excludedChanged = raw.map((item, index) => index === 59 ? { ...item, summary: "Changed excluded low-priority evidence." } : item); const selectedChanged = raw.map((item, index) => index === 0 ? { ...item, summary: "Changed selected Top 5 evidence." } : item);
+  assert.equal(base.stories.length <= DAILY_INTELLIGENCE_MAX_STORIES, true); assert.equal(dailyIntelligenceInputHash(base), dailyIntelligenceInputHash(unchanged)); assert.equal(dailyIntelligenceInputHash(base), dailyIntelligenceInputHash(buildDailyIntelligenceInput({ ...input(), stories: excludedChanged }))); assert.notEqual(dailyIntelligenceInputHash(base), dailyIntelligenceInputHash(buildDailyIntelligenceInput({ ...input(), stories: selectedChanged })));
+});
+
+test("Daily Intelligence has an isolated 40-second timeout while Story Briefing retains the live AI timeout", () => {
+  const dailySource = readFileSync(new URL("./daily-intelligence.ts", import.meta.url), "utf8");
+  const storySource = readFileSync(new URL("./story-briefing.ts", import.meta.url), "utf8");
+  assert.equal(DAILY_INTELLIGENCE_TIMEOUT_MS, 40_000);
+  assert.equal(LIVE_AI_TIMEOUT_MS, 20_000);
+  assert.match(dailySource, /fetchWithTimeout\([\s\S]*DAILY_INTELLIGENCE_TIMEOUT_MS\)/);
+  assert.match(storySource, /fetchWithTimeout\([\s\S]*LIVE_AI_TIMEOUT_MS\)/);
 });

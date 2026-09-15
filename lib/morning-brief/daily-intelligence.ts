@@ -2,11 +2,10 @@ import "server-only";
 import { requireApprovedUser } from "@/lib/auth/guard";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { fetchWithTimeout } from "./request-timeout";
-import { LIVE_AI_TIMEOUT_MS } from "./sources/config";
 import { MORNING_BRIEF_MODELS, assertMorningBriefGenerativeModel } from "./ai-models";
 import { getMarketPulse } from "./market-pulse";
 import { IMPORT_CLASSIFICATION_VERSION } from "./classification-contract";
-import { DAILY_INTELLIGENCE_RESPONSE_SCHEMA, DAILY_INTELLIGENCE_SYSTEM_PROMPT, DAILY_INTELLIGENCE_VERSION, assertSafeDailyIntelligenceInput, buildDailyIntelligenceInput, dailyIntelligencePromptInput, parseDailyIntelligenceOutput, type DailyIntelligence, type DailyIntelligenceInput } from "./daily-intelligence-contract";
+import { DAILY_INTELLIGENCE_RESPONSE_SCHEMA, DAILY_INTELLIGENCE_SYSTEM_PROMPT, DAILY_INTELLIGENCE_TIMEOUT_MS, DAILY_INTELLIGENCE_VERSION, assertSafeDailyIntelligenceInput, buildDailyIntelligenceInput, dailyIntelligencePromptInput, parseDailyIntelligenceOutput, type DailyIntelligence, type DailyIntelligenceInput } from "./daily-intelligence-contract";
 import { resolveDailyIntelligenceFlow } from "./daily-intelligence-flow";
 
 type DailyResult = { state: "ready" | "stale"; intelligence: DailyIntelligence | null };
@@ -28,7 +27,7 @@ async function loadDailyInput(userId: string): Promise<DailyIntelligenceInput | 
   const clusterMap = new Map((clusters ?? []).map((cluster) => [cluster.id, cluster]));
   const { data: links } = await db.from("morning_brief_cluster_articles").select("cluster_id,article_id").in("cluster_id", clusterIds);
   const articleIds = [...new Set((links ?? []).map((link) => link.article_id))];
-  const [{ data: articles }, { data: sources }, { data: classifications }, { data: assets }, { data: exposures }, { data: preferences }, { data: learned }, marketQuotes] = await Promise.all([
+  const [{ data: articles }, { data: sources }, { data: classifications }, { data: assets }, { data: exposures }, { data: preferences }, { data: learned }, { data: scores }, marketQuotes] = await Promise.all([
     db.from("morning_brief_articles").select("id,source_id,title,excerpt,body_text,content_hash").in("id", articleIds),
     db.from("morning_brief_sources").select("id,name"),
     db.from("morning_brief_article_classifications").select("article_id,classification_version,summary,why_it_matters,topics,categories,countries,sectors").in("article_id", articleIds).eq("classification_version", brief.classification_version ?? IMPORT_CLASSIFICATION_VERSION),
@@ -36,10 +35,17 @@ async function loadDailyInput(userId: string): Promise<DailyIntelligenceInput | 
     db.from("morning_brief_portfolio_exposures").select("portfolio_asset_id,exposure_type,exposure_key,relevance_strength").eq("user_id", userId),
     db.from("morning_brief_user_preferences").select("dimension_type,dimension_key,explicit_weight,pinned").eq("user_id", userId),
     db.from("morning_brief_learned_interests").select("dimension_type,dimension_key,affinity_score").eq("user_id", userId),
+    db.from("morning_brief_scores").select("story_cluster_id,portfolio_relevance,learned_preference,final_score,created_at").eq("user_id", userId).in("story_cluster_id", clusterIds).order("created_at", { ascending: false }),
     getMarketPulse(),
   ]);
   const articleMap = new Map((articles ?? []).map((article) => [article.id, article])); const sourceMap = new Map((sources ?? []).map((source) => [source.id, source.name]));
   const classificationsByArticle = new Map((classifications ?? []).map((classification) => [classification.article_id, classification]));
+  const scoreByCluster = new Map<string, NonNullable<typeof scores>[number]>();
+  for (const score of scores ?? []) {
+    if (score.story_cluster_id && !scoreByCluster.has(score.story_cluster_id)) {
+      scoreByCluster.set(score.story_cluster_id, score);
+    }
+  }
   const articleIdsByCluster = new Map<string, string[]>(); for (const link of links ?? []) articleIdsByCluster.set(link.cluster_id, [...(articleIdsByCluster.get(link.cluster_id) ?? []), link.article_id]);
   const assetMap = new Map((assets ?? []).map((asset) => [asset.id, asset]));
   const stories = items.flatMap((item) => {
@@ -47,7 +53,7 @@ async function loadDailyInput(userId: string): Promise<DailyIntelligenceInput | 
     const clusterArticleIds = articleIdsByCluster.get(cluster.id) ?? []; const covered = clusterArticleIds.map((id) => articleMap.get(id)).filter((article): article is NonNullable<typeof articles>[number] => Boolean(article));
     const primary = cluster.primary_article_id ? articleMap.get(cluster.primary_article_id) : covered[0]; if (!primary) return [];
     const classification = classificationsByArticle.get(primary.id);
-    return [{ clusterId: cluster.id, section: item.section, rank: item.rank, headline: cluster.canonical_headline ?? primary.title, summary: cluster.canonical_summary ?? classification?.summary ?? primary.excerpt, sources: covered.map((article) => sourceMap.get(article.source_id) ?? "Public source"), contentHashes: covered.map((article) => article.content_hash ?? ""), classification: classification ? { version: classification.classification_version, summary: classification.summary, whyItMatters: classification.why_it_matters, topics: classification.topics, categories: classification.categories, countries: classification.countries, sectors: classification.sectors } : null }];
+    const score = scoreByCluster.get(cluster.id); return [{ clusterId: cluster.id, section: item.section, rank: item.rank, selectionPriority: (score?.portfolio_relevance ?? 0) * 2 + (score?.learned_preference ?? 0) + (score?.final_score ?? 0), headline: cluster.canonical_headline ?? primary.title, summary: cluster.canonical_summary ?? classification?.summary ?? primary.excerpt, sources: covered.map((article) => sourceMap.get(article.source_id) ?? "Public source"), contentHashes: covered.map((article) => article.content_hash ?? ""), classification: classification ? { version: classification.classification_version, summary: classification.summary, whyItMatters: classification.why_it_matters, topics: classification.topics, categories: classification.categories, countries: classification.countries, sectors: classification.sectors } : null }];
   });
   const market = marketQuotes.map((quote) => ({ symbol: quote.symbol, label: quote.label, value: quote.value, percentChange: quote.percentChange, direction: quote.percentChange > 0 ? "up" as const : quote.percentChange < 0 ? "down" as const : "flat" as const, asOf: quote.asOf, status: quote.status }));
   const input = buildDailyIntelligenceInput({
@@ -63,9 +69,9 @@ const fromRow = (row: { executive_summary_json: string[]; main_themes_json: Arra
 async function synthesize(input: DailyIntelligenceInput): Promise<DailyIntelligence> {
   const apiKey = process.env.OPENAI_API_KEY; if (!apiKey) throw new Error("OPENAI_API_KEY is not configured.");
   const model = assertMorningBriefGenerativeModel(MORNING_BRIEF_MODELS.advanced);
-  const startedAt = Date.now(); log("terra started", { storyCount: input.stories.length, timeoutMs: LIVE_AI_TIMEOUT_MS });
+  const startedAt = Date.now(); log("terra started", { storyCount: input.stories.length, timeoutMs: DAILY_INTELLIGENCE_TIMEOUT_MS });
   let response: Response;
-  try { response = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model, messages: [{ role: "system", content: DAILY_INTELLIGENCE_SYSTEM_PROMPT }, { role: "user", content: JSON.stringify(dailyIntelligencePromptInput(input)) }], response_format: { type: "json_schema", json_schema: DAILY_INTELLIGENCE_RESPONSE_SCHEMA } }) }, LIVE_AI_TIMEOUT_MS); }
+  try { response = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model, messages: [{ role: "system", content: DAILY_INTELLIGENCE_SYSTEM_PROMPT }, { role: "user", content: JSON.stringify(dailyIntelligencePromptInput(input)) }], response_format: { type: "json_schema", json_schema: DAILY_INTELLIGENCE_RESPONSE_SCHEMA } }) }, DAILY_INTELLIGENCE_TIMEOUT_MS); }
   catch (error) { console.warn("[daily-intelligence] terra request failed", { ...safeError(error), durationMs: Date.now() - startedAt }); throw error; }
   if (!response.ok) { console.warn("[daily-intelligence] terra response failed", { status: response.status, durationMs: Date.now() - startedAt }); throw new Error(`Daily Intelligence unavailable (${response.status}).`); }
   log("terra completed", { durationMs: Date.now() - startedAt });

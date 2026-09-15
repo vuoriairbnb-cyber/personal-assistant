@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 
 export const DAILY_INTELLIGENCE_VERSION = "morning-brief-daily-intelligence-v1";
 const MAX_TEXT = 5_000;
+export const DAILY_INTELLIGENCE_MAX_STORIES = 15;
+export const DAILY_INTELLIGENCE_MAX_EVIDENCE_CHARS = 28_000;
+/** Daily synthesis has a separate budget; the live ingestion/story timeout remains 20 seconds. */
+export const DAILY_INTELLIGENCE_TIMEOUT_MS = 40_000;
 
 export type DailyIntelligenceTheme = { title: string; explanation: string };
 export type DailyIntelligence = {
@@ -17,7 +21,7 @@ export type DailyMarketContext = { symbol: string; label: string; value: number;
 export type DailyIntelligenceInput = {
   version: typeof DAILY_INTELLIGENCE_VERSION;
   brief: { id: string; date: string; version: number; algorithmVersion: string; classificationVersion: string | null };
-  stories: Array<{ clusterId: string; section: string; rank: number; headline: string; summary: string | null; sources: string[]; contentHashes: string[]; classification: { version: string; summary: string | null; whyItMatters: string | null; topics: string[]; categories: string[]; countries: string[]; sectors: string[] } | null }>;
+  stories: Array<{ clusterId: string; section: string; rank: number; headline: string; summary: string | null; sources: string[]; contentHashes: string[]; selectionPriority?: number; classification: { version: string; summary: string | null; whyItMatters: string | null; topics: string[]; categories: string[]; countries: string[]; sectors: string[] } | null }>;
   personalization: { portfolioLenses: Array<{ name: string; priority: number; exposures: Array<{ type: string; key: string; strength: number }> }>; preferences: Array<{ type: string; key: string; weight: number; pinned: boolean }>; learnedInterests: Array<{ type: string; key: string; affinity: number }> };
   market: DailyMarketContext[];
 };
@@ -31,19 +35,69 @@ const stable = (value: unknown): unknown => Array.isArray(value)
     : value;
 const sortBy = <T>(items: T[], key: (item: T) => string) => [...items].sort((a, b) => key(a).localeCompare(key(b)));
 const text = (value: string | null | undefined, max = MAX_TEXT) => value?.trim().slice(0, max) || null;
+const label = (value: string, max = 96) => value.trim().slice(0, max);
+const labels = (values: string[], maxItems: number) => [...new Set(values.map((value) => label(value)).filter(Boolean))].sort().slice(0, maxItems);
+const sectionOrder = ["vietnam", "credit", "markets", "finland", "politics", "emerging_frontier", "vc_pe", "world", "worth_reading"];
+const sectionRank = (section: string) => {
+  const rank = sectionOrder.indexOf(section);
+  return rank === -1 ? sectionOrder.length : rank;
+};
+const candidateOrder = (a: DailyIntelligenceInput["stories"][number], b: DailyIntelligenceInput["stories"][number]) => (b.selectionPriority ?? 0) - (a.selectionPriority ?? 0) || sectionRank(a.section) - sectionRank(b.section) || a.rank - b.rank || a.clusterId.localeCompare(b.clusterId);
+const promptStory = (story: DailyIntelligenceInput["stories"][number]) => ({ section: story.section, rank: story.rank, headline: story.headline, summary: story.summary, sources: story.sources, classification: story.classification });
+export const dailyIntelligenceEvidenceChars = (stories: DailyIntelligenceInput["stories"]) => stories.reduce((total, story) => total + JSON.stringify(promptStory(story)).length, 0);
+
+/** Top 5 is always retained. Extras are unique, section-diverse, ranking-aware and only admitted whole within the evidence budget. */
+export function selectDailyIntelligenceStories(stories: DailyIntelligenceInput["stories"]) {
+  const topFive: DailyIntelligenceInput["stories"] = [];
+  const topClusters = new Set<string>();
+  const topFiveCandidates = stories
+    .filter((item) => item.section === "top_5")
+    .sort((a, b) => a.rank - b.rank || a.clusterId.localeCompare(b.clusterId));
+  for (const story of topFiveCandidates) {
+    if (!topClusters.has(story.clusterId) && topFive.length < 5) {
+      topFive.push(story);
+      topClusters.add(story.clusterId);
+    }
+  }
+
+  const uniqueExtras = new Map<string, DailyIntelligenceInput["stories"][number]>();
+  const extraCandidates = [...stories]
+    .filter((item) => !topClusters.has(item.clusterId) && item.section !== "top_5")
+    .sort(candidateOrder);
+  for (const story of extraCandidates) {
+    if (!uniqueExtras.has(story.clusterId)) uniqueExtras.set(story.clusterId, story);
+  }
+  const ranked = [...uniqueExtras.values()].sort(candidateOrder);
+  const selected = [...topFive];
+  const included = new Set(selected.map((story) => story.clusterId));
+  let usedChars = dailyIntelligenceEvidenceChars(selected);
+  const extras = ranked.filter((story) => !included.has(story.clusterId));
+  const diverse = sectionOrder.flatMap((section) => extras.filter((story) => story.section === section).slice(0, 1));
+  const remaining = [...diverse, ...extras.filter((story) => !diverse.includes(story))];
+  for (const story of remaining) {
+    if (selected.length >= DAILY_INTELLIGENCE_MAX_STORIES) break;
+    const chars = JSON.stringify(promptStory(story)).length;
+    if (usedChars + chars > DAILY_INTELLIGENCE_MAX_EVIDENCE_CHARS) continue;
+    selected.push(story);
+    included.add(story.clusterId);
+    usedChars += chars;
+  }
+  return selected;
+}
 
 /** Creates deterministic, non-secret editorial evidence. User IDs, vectors and raw provider payloads never enter it. */
 export function buildDailyIntelligenceInput(input: Omit<DailyIntelligenceInput, "version">): DailyIntelligenceInput {
+  const normalizedStories = input.stories.map((story) => ({
+    ...story,
+    headline: story.headline.trim().slice(0, 360), summary: text(story.summary, 900),
+    sources: labels(story.sources, 4),
+    contentHashes: [...new Set(story.contentHashes.filter(Boolean))].sort(),
+    classification: story.classification ? { ...story.classification, version: label(story.classification.version), summary: text(story.classification.summary, 600), whyItMatters: text(story.classification.whyItMatters, 600), topics: labels(story.classification.topics, 5), categories: labels(story.classification.categories, 4), countries: labels(story.classification.countries, 4), sectors: labels(story.classification.sectors, 4) } : null,
+  }));
   return {
     version: DAILY_INTELLIGENCE_VERSION,
     brief: { ...input.brief },
-    stories: sortBy(input.stories, (story) => `${story.section}:${String(story.rank).padStart(3, "0")}:${story.clusterId}`).map((story) => ({
-      ...story,
-      headline: story.headline.trim().slice(0, 500), summary: text(story.summary, 2_000),
-      sources: [...new Set(story.sources.map((source) => source.trim()).filter(Boolean))].sort(),
-      contentHashes: [...new Set(story.contentHashes.filter(Boolean))].sort(),
-      classification: story.classification ? { ...story.classification, summary: text(story.classification.summary, 1_500), whyItMatters: text(story.classification.whyItMatters, 1_500), topics: [...story.classification.topics].sort(), categories: [...story.classification.categories].sort(), countries: [...story.classification.countries].sort(), sectors: [...story.classification.sectors].sort() } : null,
-    })),
+    stories: selectDailyIntelligenceStories(normalizedStories).map((story) => ({ clusterId: story.clusterId, section: story.section, rank: story.rank, headline: story.headline, summary: story.summary, sources: story.sources, contentHashes: story.contentHashes, classification: story.classification })),
     personalization: {
       portfolioLenses: sortBy(input.personalization.portfolioLenses, (item) => item.name).map((item) => ({ ...item, exposures: sortBy(item.exposures, (exposure) => `${exposure.type}:${exposure.key}`) })),
       preferences: sortBy(input.personalization.preferences, (item) => `${item.type}:${item.key}`),
